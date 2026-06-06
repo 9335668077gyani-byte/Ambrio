@@ -33,9 +33,18 @@ class RouterService:
     async def _recv_loop(self) -> None:
         while True:
             parts = await self._socket.recv_multipart()
-            # ZMQ ROUTER frame: [identity, empty delimiter, payload]
-            identity, _, raw = parts[0], parts[1], parts[2]
-            frame = Frame.model_validate(msgpack.unpackb(raw, raw=False))
+            # ROUTER socket: [identity, empty_delimiter, payload]
+            # Guard against malformed frames
+            if len(parts) < 3:
+                log.warning(f"Malformed ZMQ frame ({len(parts)} parts), skipping")
+                continue
+            identity = parts[0]
+            raw      = parts[-1]   # payload is always last
+            try:
+                frame = Frame.model_validate(msgpack.unpackb(raw, raw=False))
+            except Exception as e:
+                log.warning(f"Frame decode error: {e}")
+                continue
             asyncio.create_task(self._handle(identity, frame))
 
     async def _handle(self, identity: bytes, frame: Frame) -> None:
