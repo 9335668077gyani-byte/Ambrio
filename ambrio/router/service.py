@@ -83,6 +83,8 @@ class RouterService:
                 ))
 
         await session.persist_turn(frame.payload.get("content", ""), assistant)
+        # Fire learning loop check (non-blocking background task)
+        await self.sessions.post_turn_tick(frame.session_id)
         await self._send(identity, Frame(
             session_id=frame.session_id,
             type=MsgType.CHAT_DONE,

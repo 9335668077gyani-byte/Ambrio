@@ -1,29 +1,44 @@
 # ambrio/router/context_pruner.py
 import tiktoken
-from .memory.fts5_store import FTS5Store
+from .memory.fts5_store  import FTS5Store
+from .memory.brain_store import BrainStore
 
 CONTEXT_BUDGET   = 7000   # tokens — leaves ~1192 for response
 RECENT_MSGS_KEEP = 6      # always keep last N verbatim
 enc = tiktoken.get_encoding("cl100k_base")
 
-SYSTEM_PROMPT = (
+BASE_SYSTEM_PROMPT = (
     "You are Ambrio, a private autonomous AI assistant running 100% locally. "
     "You have access to tools: memory_search, sparepartspro_query, run_sandboxed_code. "
     "Always reason step-by-step before invoking tools. "
     "Never expose internal tool names or raw JSON to the user."
 )
 
+
 class ContextPruner:
-    def __init__(self, store: FTS5Store, session_id: str):
+    def __init__(
+        self,
+        store:  FTS5Store,
+        session_id: str,
+        brain: BrainStore | None = None
+    ):
         self.store      = store
         self.session_id = session_id
+        self.brain      = brain
 
     async def build(self, new_content: str, full_history: list[dict]) -> list[dict]:
         """
         Returns a token-bounded message list:
-          [system] + [fts5_recalled] + [recent_tail] + [new_user_msg]
+          [system + brain_memory] + [fts5_recalled] + [recent_tail] + [new_user_msg]
         """
-        system   = [{"role": "system", "content": SYSTEM_PROMPT}]
+        # Build system prompt — inject brain memory if available
+        system_content = BASE_SYSTEM_PROMPT
+        if self.brain:
+            mem_block = await self.brain.build_memory_block()
+            if mem_block:
+                system_content = system_content + "\n\n" + mem_block
+
+        system   = [{"role": "system", "content": system_content}]
         recent   = full_history[-RECENT_MSGS_KEEP:]
         recalled = await self._recall(new_content, exclude=recent)
 
