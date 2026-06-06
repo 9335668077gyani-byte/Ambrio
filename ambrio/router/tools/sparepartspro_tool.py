@@ -1,24 +1,58 @@
 # ambrio/router/tools/sparepartspro_tool.py
-import aiosqlite, os
-from ..tool_registry import tool
+"""
+SparePartsPro ERP tool — two modes:
 
-SPARE_DB = os.path.join(
-    os.environ.get("APPDATA", ""), "SparePartsPro", "spare_parts.db"
-)
+  1. Natural language query (preferred):
+     sparepartspro_query(question="What are my top 5 selling parts this month?")
+     → calls ERPQueryEngine: NL → SQL → execute → NL answer
+
+  2. Raw SQL (fallback, still guarded):
+     sparepartspro_query(sql="SELECT part_name, qty FROM parts WHERE qty < 10")
+     → runs validated SQL directly, returns rows as JSON
+
+The tool is registered via @tool() and dispatched by the ToolRegistry.
+"""
+import json
+from ..tool_registry import tool
+from ..erp.nl_to_sql  import ERPQueryEngine
+from ..erp.sql_guard  import validate, SQLGuardError
+
+_engine: ERPQueryEngine | None = None
+
+
+def init_erp_tool(engine: ERPQueryEngine) -> None:
+    global _engine
+    _engine = engine
+
 
 @tool()
-async def sparepartspro_query(sql: str) -> dict:
-    """Run a READ-ONLY SELECT query against the SparePartsPro database. Only SELECT statements are permitted."""
-    sql_clean = sql.strip()
-    if not sql_clean.upper().startswith("SELECT"):
-        return {"error": "Only SELECT queries are permitted"}
-    if not os.path.exists(SPARE_DB):
-        return {"error": f"SparePartsPro database not found at: {SPARE_DB}"}
+async def sparepartspro_query(question: str) -> dict:
+    """
+    Query the SparePartsPro ERP database using natural language.
+    Ask anything about invoices, parts inventory, sales, customers, purchase orders, or vendors.
+    Examples: 'total sales today', 'parts below reorder level', 'top 10 selling parts this month'.
+    """
+    global _engine
+    if not _engine:
+        _engine = ERPQueryEngine()
+    return await _engine.query(question)
+
+
+@tool()
+async def sparepartspro_sql(sql: str) -> dict:
+    """
+    Run a raw READ-ONLY SQL SELECT against the SparePartsPro database.
+    Only use this when you need precise control over the query.
+    Never query: users, settings, shop_config tables.
+    """
+    global _engine
+    if not _engine:
+        _engine = ERPQueryEngine()
     try:
-        async with aiosqlite.connect(SPARE_DB) as c:
-            c.row_factory = aiosqlite.Row
-            cur = await c.execute(sql_clean)
-            rows = await cur.fetchall()
-        return {"rows": [dict(r) for r in rows[:100]]}  # cap at 100 rows
-    except Exception as e:
-        return {"error": str(e)}
+        sql = validate(sql)
+    except SQLGuardError as e:
+        return {"error": str(e), "rows": []}
+    rows, err = await _engine._execute(sql)
+    if err:
+        return {"error": err, "rows": []}
+    return {"rows": rows, "count": len(rows)}
