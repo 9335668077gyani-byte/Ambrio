@@ -1,9 +1,10 @@
 # router_service.py
 """
 Entry point for the Ambrio Cognitive Router process.
-Run this as a separate process before launching the UI.
+Run via start_ambrio.ps1, or manually:
+    .venv\Scripts\python.exe router_service.py [--db ambrio.db]
 """
-import asyncio, logging, sys
+import asyncio, logging, sys, argparse
 from ambrio.router.service import RouterService
 
 logging.basicConfig(
@@ -13,4 +14,7 @@ logging.basicConfig(
 )
 
 if __name__ == "__main__":
-    asyncio.run(RouterService().start())
+    parser = argparse.ArgumentParser(description="Ambrio Cognitive Router")
+    parser.add_argument("--db", default="ambrio.db", help="Path to SQLite DB file")
+    args = parser.parse_args()
+    asyncio.run(RouterService().start(db_path=args.db))
