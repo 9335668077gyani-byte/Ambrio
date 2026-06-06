@@ -1,0 +1,177 @@
+/* ambrio/ui/theme/neumorphic.qss */
+
+/* === Base === */
+QMainWindow, QWidget {
+    background-color: #1e2130;
+    color: #d4d8f0;
+    font-family: "Segoe UI", "Inter", "Roboto", sans-serif;
+    font-size: 14px;
+}
+
+/* === Chat bubble — user === */
+#userBubble {
+    background-color: #252839;
+    border-radius: 16px;
+    border-left: 3px solid #7c6af7;
+    padding: 10px 14px;
+    margin-left: 60px;
+    margin-right: 8px;
+    margin-top: 4px;
+    margin-bottom: 4px;
+}
+
+/* === Chat bubble — assistant === */
+#assistantBubble {
+    background-color: #1a1c2e;
+    border-radius: 16px;
+    border-left: 3px solid #5de0e6;
+    padding: 10px 14px;
+    margin-right: 60px;
+    margin-left: 8px;
+    margin-top: 4px;
+    margin-bottom: 4px;
+}
+
+/* === Input area === */
+QTextEdit#chatInput {
+    background-color: #181a28;
+    color: #d4d8f0;
+    border: 1px solid #2e3248;
+    border-radius: 14px;
+    padding: 10px 14px;
+    selection-background-color: #7c6af7;
+}
+
+QTextEdit#chatInput:focus {
+    border: 1px solid #7c6af7;
+    background-color: #1b1d2e;
+}
+
+/* === Send button === */
+QPushButton#sendBtn {
+    background: qlineargradient(
+        x1:0, y1:0, x2:1, y2:1,
+        stop:0 #7c6af7, stop:1 #5de0e6
+    );
+    color: #ffffff;
+    border: none;
+    border-radius: 12px;
+    padding: 10px 22px;
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 0.5px;
+}
+
+QPushButton#sendBtn:hover {
+    background: qlineargradient(
+        x1:0, y1:0, x2:1, y2:1,
+        stop:0 #9580ff, stop:1 #72eeff
+    );
+}
+
+QPushButton#sendBtn:pressed {
+    background: qlineargradient(
+        x1:0, y1:0, x2:1, y2:1,
+        stop:0 #6655d9, stop:1 #45c9d0
+    );
+}
+
+QPushButton#sendBtn:disabled {
+    background: #2e3248;
+    color: #5a6080;
+}
+
+/* === Sidebar === */
+#sidebar {
+    background-color: #181a28;
+    border-right: 1px solid #2e3248;
+}
+
+#appTitle {
+    font-size: 20px;
+    font-weight: 800;
+    color: #7c6af7;
+    letter-spacing: 1px;
+    padding: 8px 0;
+}
+
+QPushButton#newSessionBtn {
+    background: transparent;
+    color: #7c6af7;
+    border: 1px solid #7c6af7;
+    border-radius: 8px;
+    padding: 7px 12px;
+    font-size: 13px;
+    font-weight: 600;
+    text-align: left;
+}
+
+QPushButton#newSessionBtn:hover {
+    background: rgba(124, 106, 247, 0.12);
+}
+
+/* === Session list === */
+QListWidget#sessionList {
+    background-color: transparent;
+    border: none;
+    font-size: 13px;
+}
+
+QListWidget#sessionList::item {
+    padding: 8px 10px;
+    border-radius: 8px;
+    color: #7880a8;
+}
+
+QListWidget#sessionList::item:selected {
+    background-color: rgba(124, 106, 247, 0.18);
+    color: #d4d8f0;
+    border-left: 3px solid #7c6af7;
+}
+
+QListWidget#sessionList::item:hover {
+    background-color: rgba(255, 255, 255, 0.04);
+    color: #d4d8f0;
+}
+
+/* === Scrollbar === */
+QScrollBar:vertical {
+    width: 6px;
+    background: transparent;
+    margin: 0;
+}
+
+QScrollBar::handle:vertical {
+    background: #2e3248;
+    border-radius: 3px;
+    min-height: 30px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background: #7c6af7;
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {
+    height: 0px;
+}
+
+/* === Tool approval dialog === */
+QMessageBox {
+    background-color: #1e2130;
+    color: #d4d8f0;
+}
+
+QMessageBox QPushButton {
+    background-color: #252839;
+    color: #d4d8f0;
+    border: 1px solid #2e3248;
+    border-radius: 8px;
+    padding: 7px 18px;
+    min-width: 80px;
+}
+
+QMessageBox QPushButton:hover {
+    background-color: #2e3248;
+    border-color: #7c6af7;
+}
