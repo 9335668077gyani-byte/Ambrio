@@ -27,7 +27,12 @@ class ZmqBridge(QThread):
 
     # ── QThread.run ──────────────────────────────────────────────────────────
     def run(self):
-        self._loop = asyncio.new_event_loop()
+        # Windows default (ProactorEventLoop) doesn't support ZMQ add_reader
+        import sys
+        if sys.platform == "win32":
+            self._loop = asyncio.SelectorEventLoop()
+        else:
+            self._loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self._loop)
         self._send_queue = asyncio.Queue()
         try:
