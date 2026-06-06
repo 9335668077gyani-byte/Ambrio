@@ -33,24 +33,29 @@ if (-not (Test-Path $Python)) {
     Write-Host "  [ok] Python venv: $Python" -ForegroundColor Green
 }
 
-# Ollama running
+# Ollama check via CLI (more reliable than HTTP in all environments)
 $ollamaOk = $false
-try {
-    $response = Invoke-WebRequest -Uri "http://localhost:11434/api/tags" -TimeoutSec 3 -ErrorAction Stop
-    $models   = ($response.Content | ConvertFrom-Json).models
-    if ($models.Count -gt 0) {
-        $modelName = $models[0].name
-        Write-Host "  [ok] Ollama running -- model: $modelName" -ForegroundColor Green
+if (-not (Get-Command "ollama" -ErrorAction SilentlyContinue)) {
+    Write-Host "  [x] Ollama not found. Download from: https://ollama.com/download" -ForegroundColor Red
+    $ok = $false
+} else {
+    try {
+        $ollamaOut = & ollama list 2>&1
+        $modelLine = $ollamaOut | Where-Object { $_ -match "\S" } | Select-Object -Skip 1 -First 1
+        if ($modelLine) {
+            $modelName = ($modelLine -split "\s+")[0]
+            Write-Host "  [ok] Ollama ready -- model: $modelName" -ForegroundColor Green
+        } else {
+            Write-Host "  [!] Ollama found but no models installed. Run: ollama pull llama3.2:1b" -ForegroundColor Yellow
+        }
         $ollamaOk = $true
-    } else {
-        Write-Host "  [!] Ollama running but no models installed. Run: ollama pull llama3.2:1b" -ForegroundColor Yellow
+    } catch {
+        Write-Host "  [!] Ollama not running -- starting it..." -ForegroundColor Yellow
+        Start-Process "ollama" -ArgumentList "serve" -WindowStyle Hidden
+        Start-Sleep -Seconds 3
+        Write-Host "  [ok] Ollama started (background)" -ForegroundColor Green
+        $ollamaOk = $true
     }
-} catch {
-    Write-Host "  [!] Ollama not running -- starting it..." -ForegroundColor Yellow
-    Start-Process "ollama" -ArgumentList "serve" -WindowStyle Hidden
-    Start-Sleep -Seconds 3
-    Write-Host "  [ok] Ollama started (background)" -ForegroundColor Green
-    $ollamaOk = $true
 }
 
 # SparePartsPro DB
