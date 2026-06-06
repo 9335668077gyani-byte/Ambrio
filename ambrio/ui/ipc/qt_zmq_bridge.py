@@ -1,5 +1,5 @@
 # ambrio/ui/ipc/qt_zmq_bridge.py
-import zmq, zmq.asyncio, asyncio, msgpack, logging
+import zmq, zmq.asyncio, asyncio, msgpack, logging, sys
 from PyQt6.QtCore import QThread, pyqtSignal
 from .message_protocol import Frame, MsgType
 
@@ -8,8 +8,8 @@ log = logging.getLogger(__name__)
 
 class ZmqBridge(QThread):
     """
-    Runs an asyncio event loop on a dedicated QThread.
-    Bridges ZMQ I/O ↔ Qt signals — UI main thread is never blocked.
+    Runs an asyncio SelectorEventLoop on a dedicated QThread.
+    Bridges ZMQ I/O <-> Qt signals — UI main thread is never blocked.
     """
     token_received = pyqtSignal(str, str)   # session_id, token
     done_received  = pyqtSignal(str)         # session_id
@@ -20,25 +20,34 @@ class ZmqBridge(QThread):
 
     def __init__(self):
         super().__init__()
-        self._loop: asyncio.AbstractEventLoop | None = None
-        self._socket: zmq.asyncio.Socket | None = None
+        self._loop:       asyncio.AbstractEventLoop | None = None
+        self._socket:     zmq.asyncio.Socket | None = None
         self._send_queue: asyncio.Queue | None = None
-        self._running = True
+        self._running     = True
+        self._tasks:      list[asyncio.Task] = []
 
     # ── QThread.run ──────────────────────────────────────────────────────────
     def run(self):
-        # Windows default (ProactorEventLoop) doesn't support ZMQ add_reader
-        import sys
-        if sys.platform == "win32":
-            self._loop = asyncio.SelectorEventLoop()
-        else:
-            self._loop = asyncio.new_event_loop()
+        # Windows: ProactorEventLoop doesn't support ZMQ add_reader
+        # Use SelectorEventLoop directly — no deprecated policy API needed
+        self._loop = asyncio.SelectorEventLoop() if sys.platform == "win32" \
+                     else asyncio.new_event_loop()
         asyncio.set_event_loop(self._loop)
         self._send_queue = asyncio.Queue()
         try:
             self._loop.run_until_complete(self._io_loop())
         except Exception as e:
             log.error(f"ZmqBridge loop error: {e}")
+        finally:
+            # Clean up all pending tasks before closing
+            pending = asyncio.all_tasks(self._loop)
+            for task in pending:
+                task.cancel()
+            if pending:
+                self._loop.run_until_complete(
+                    asyncio.gather(*pending, return_exceptions=True)
+                )
+            self._loop.close()
 
     # ── Internal asyncio coroutines ──────────────────────────────────────────
     async def _io_loop(self):
@@ -46,7 +55,21 @@ class ZmqBridge(QThread):
         self._socket = ctx.socket(zmq.DEALER)
         self._socket.connect(self.ROUTER_ADDR)
         log.info(f"ZMQ bridge connected to {self.ROUTER_ADDR}")
-        await asyncio.gather(self._recv_loop(), self._send_loop())
+
+        recv_task = asyncio.create_task(self._recv_loop(), name="zmq_recv")
+        send_task = asyncio.create_task(self._send_loop(), name="zmq_send")
+        self._tasks = [recv_task, send_task]
+
+        try:
+            await asyncio.gather(recv_task, send_task)
+        except asyncio.CancelledError:
+            pass
+        finally:
+            recv_task.cancel()
+            send_task.cancel()
+            await asyncio.gather(recv_task, send_task, return_exceptions=True)
+            self._socket.close()
+            ctx.term()
 
     async def _recv_loop(self):
         while self._running:
@@ -54,13 +77,26 @@ class ZmqBridge(QThread):
                 raw = await self._socket.recv()
                 frame = Frame.model_validate(msgpack.unpackb(raw, raw=False))
                 self._dispatch(frame)
+            except asyncio.CancelledError:
+                break
             except Exception as e:
-                log.warning(f"Bad frame: {e}")
+                if self._running:
+                    log.warning(f"Bad frame: {e}")
 
     async def _send_loop(self):
         while self._running:
-            frame: Frame = await self._send_queue.get()
-            await self._socket.send(msgpack.packb(frame.model_dump()))
+            try:
+                frame: Frame = await asyncio.wait_for(
+                    self._send_queue.get(), timeout=0.5
+                )
+                await self._socket.send(msgpack.packb(frame.model_dump()))
+            except asyncio.TimeoutError:
+                continue   # check _running flag again
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                if self._running:
+                    log.warning(f"Send error: {e}")
 
     # ── Signal dispatch (called from asyncio thread — emits to Qt) ───────────
     def _dispatch(self, frame: Frame):
@@ -81,6 +117,10 @@ class ZmqBridge(QThread):
             self._loop.call_soon_threadsafe(self._send_queue.put_nowait, frame)
 
     def stop(self):
+        """Graceful shutdown: set flag, cancel tasks, stop loop."""
         self._running = False
-        if self._loop:
+        if self._loop and not self._loop.is_closed():
+            # Cancel all running tasks from the Qt thread
+            for task in self._tasks:
+                self._loop.call_soon_threadsafe(task.cancel)
             self._loop.call_soon_threadsafe(self._loop.stop)
