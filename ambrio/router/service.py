@@ -33,13 +33,13 @@ class RouterService:
     async def _recv_loop(self) -> None:
         while True:
             parts = await self._socket.recv_multipart()
-            # ROUTER socket: [identity, empty_delimiter, payload]
-            # Guard against malformed frames
-            if len(parts) < 3:
+            # DEALER→ROUTER frame layout: [identity, payload] — 2 parts.
+            # (The empty delimiter only exists in REQ/REP, not DEALER/ROUTER)
+            if len(parts) < 2:
                 log.warning(f"Malformed ZMQ frame ({len(parts)} parts), skipping")
                 continue
             identity = parts[0]
-            raw      = parts[-1]   # payload is always last
+            raw      = parts[-1]   # payload is always last part
             try:
                 frame = Frame.model_validate(msgpack.unpackb(raw, raw=False))
             except Exception as e:
@@ -117,7 +117,8 @@ class RouterService:
         await self._stream_chat(identity, resume_frame)
 
     async def _send(self, identity: bytes, frame: Frame) -> None:
+        # ROUTER→DEALER: send [identity, payload] — no empty delimiter
         await self._socket.send_multipart([
-            identity, b"",
+            identity,
             msgpack.packb(frame.model_dump())
         ])
