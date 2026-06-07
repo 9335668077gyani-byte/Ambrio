@@ -6,13 +6,15 @@ log = logging.getLogger(__name__)
 
 # Model preference order — first match wins
 MODEL_PREFERENCE = [
+    "phi3:mini",      # best local — follows instructions, no refusals
+    "phi3",
     "codegemma",
-    "llama3.2:1b",
+    "mistral",
+    "llama3.2:3b",
     "llama3.2",
     "llama3",
-    "mistral",
-    "phi3",
     "gemma2",
+    "llama3.2:1b",   # last resort — poor instruction following
 ]
 
 

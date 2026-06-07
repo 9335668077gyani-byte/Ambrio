@@ -171,13 +171,21 @@ REGISTRY: dict[str, ModelDef] = {
     ),
 
     # ── Local Ollama (always free, private) ───────────────────────────────────
+    "ollama/phi3-mini": ModelDef(
+        provider  = "ollama",
+        model_id  = "phi3:mini",
+        context_k = 128,
+        tier      = "free",
+        strengths = ["chat", "fast"],
+        notes     = "Microsoft Phi-3 Mini 3.8B — follows instructions, no refusals",
+    ),
     "ollama/llama3.2-1b": ModelDef(
         provider  = "ollama",
         model_id  = "llama3.2:1b",
         context_k = 128,
         tier      = "free",
-        strengths = ["fast", "chat"],
-        notes     = "Default local model",
+        strengths = ["fast"],
+        notes     = "Tiny fallback only — poor instruction following",
     ),
     "ollama/llama3.2-3b": ModelDef(
         provider  = "ollama",
@@ -260,7 +268,8 @@ FALLBACK_CHAIN: list[str] = [
     "openrouter/deepseek-v3",
     "cohere/command-r-plus",
     "mistral/small",
-    "ollama/llama3.2-1b",   # always available
+    "ollama/phi3-mini",      # best local fallback
+    "ollama/llama3.2-1b",   # last resort
 ]
 
 
