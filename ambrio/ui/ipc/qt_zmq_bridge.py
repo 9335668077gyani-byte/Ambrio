@@ -12,7 +12,7 @@ class ZmqBridge(QThread):
     Bridges ZMQ I/O <-> Qt signals — UI main thread is never blocked.
     """
     token_received = pyqtSignal(str, str)   # session_id, token
-    done_received  = pyqtSignal(str)         # session_id
+    done_received  = pyqtSignal(str, dict)    # session_id, payload (model/tokens/elapsed)
     tool_call_gate = pyqtSignal(str, dict)   # session_id, tool_payload
     error_received = pyqtSignal(str, str)    # session_id, message
 
@@ -104,7 +104,7 @@ class ZmqBridge(QThread):
             case MsgType.CHAT_TOKEN:
                 self.token_received.emit(frame.session_id, frame.payload.get("token", ""))
             case MsgType.CHAT_DONE:
-                self.done_received.emit(frame.session_id)
+                self.done_received.emit(frame.session_id, frame.payload)
             case MsgType.TOOL_CALL:
                 self.tool_call_gate.emit(frame.session_id, frame.payload)
             case MsgType.ERROR:

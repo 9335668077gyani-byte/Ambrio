@@ -149,9 +149,20 @@ class RouterService:
             ))
 
     async def _stream_chat(self, identity: bytes, frame: Frame) -> None:
+        import time
         session   = await self.sessions.get_or_create(frame.session_id)
         messages  = await session.build_context(frame.payload.get("content", ""))
         assistant = ""
+        token_count = 0
+        t_start = time.monotonic()
+
+        # Capture which model alias is chosen for this request
+        user_text = frame.payload.get("content", "")
+        model_alias = self._model_router._select_model_alias(user_text)
+        from ambrio.router.model_registry import get_model
+        model_def   = get_model(model_alias)
+        provider    = model_def.provider if model_def else "ollama"
+        model_id    = model_def.model_id  if model_def else model_alias
 
         async for chunk in session.ollama.stream(messages, tools=self.tools.schema()):
             if chunk.get("done"):
@@ -165,11 +176,13 @@ class RouterService:
                 tool_args = tool_call.get("function", {}).get("arguments", {})
                 log.info(f"Structured tool call: {tool_name}({tool_args})")
                 await self._execute_tool_and_reply(identity, frame, session,
-                                                   assistant, tool_name, tool_args)
+                                                   assistant, tool_name, tool_args,
+                                                   model_alias=model_alias)
                 return
 
-            token     = msg.get("content", "")
-            assistant += token
+            token = msg.get("content", "")
+            assistant  += token
+            token_count += len(token.split()) if token else 0
             if token:
                 await self._send(identity, Frame(
                     session_id=frame.session_id,
@@ -177,22 +190,30 @@ class RouterService:
                     payload={"token": token}
                 ))
 
-        # ── Text-based tool call fallback (small models like llama3.2:1b) ─────
+        # ── Text-based tool call fallback (small models like llama3.2:1b) ──
         tool_hit = _extract_text_tool_call(assistant)
         if tool_hit:
             tool_name, tool_args = tool_hit
             log.info(f"Text tool call detected: {tool_name}({tool_args})")
             await self._execute_tool_and_reply(identity, frame, session,
-                                               assistant, tool_name, tool_args)
+                                               assistant, tool_name, tool_args,
+                                               model_alias=model_alias)
             return
 
-        # ── Normal text response ──────────────────────────────────────────────
+        # ── Normal text response ────────────────────────────────────
+        elapsed = round(time.monotonic() - t_start, 1)
         await session.persist_turn(frame.payload.get("content", ""), assistant)
         await self.sessions.post_turn_tick(frame.session_id)
         await self._send(identity, Frame(
             session_id=frame.session_id,
             type=MsgType.CHAT_DONE,
-            payload={}
+            payload={
+                "model":    model_alias,
+                "provider": provider,
+                "model_id": model_id,
+                "tokens":   token_count,
+                "elapsed":  elapsed,
+            }
         ))
 
     async def _execute_tool_and_reply(
@@ -202,9 +223,17 @@ class RouterService:
         session,
         assistant: str,
         tool_name: str,
-        tool_args: dict
+        tool_args: dict,
+        model_alias: str = "ollama/llama3.2-1b",
     ) -> None:
+        import time
         """Execute a tool call and stream the result back as a natural answer."""
+        t_start = time.monotonic()
+        from ambrio.router.model_registry import get_model
+        model_def = get_model(model_alias)
+        provider  = model_def.provider if model_def else "ollama"
+        model_id  = model_def.model_id  if model_def else model_alias
+
         # Execute the tool
         try:
             result = await self.tools.dispatch(tool_name, tool_args)
@@ -225,7 +254,7 @@ class RouterService:
         final_answer = compress_text(final_answer, max_tokens=400)
 
         # Stream the answer token by token (word-by-word for smooth UX)
-        words = final_answer.split()
+        words   = final_answer.split()
         streamed = ""
         for i, word in enumerate(words):
             token = word + (" " if i < len(words) - 1 else "")
@@ -235,14 +264,22 @@ class RouterService:
                 type=MsgType.CHAT_TOKEN,
                 payload={"token": token}
             ))
-            await asyncio.sleep(0.015)   # ~65 words/sec — feels like streaming
+            await asyncio.sleep(0.015)
 
+        elapsed = round(time.monotonic() - t_start, 1)
         await session.persist_turn(frame.payload.get("content", ""), streamed)
         await self.sessions.post_turn_tick(frame.session_id)
         await self._send(identity, Frame(
             session_id=frame.session_id,
             type=MsgType.CHAT_DONE,
-            payload={}
+            payload={
+                "model":    model_alias,
+                "provider": provider,
+                "model_id": model_id,
+                "tokens":   len(streamed.split()),
+                "elapsed":  elapsed,
+                "tool":     tool_name,
+            }
         ))
 
     async def _resume_after_tool(self, identity: bytes, frame: Frame) -> None:

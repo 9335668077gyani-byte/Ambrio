@@ -66,6 +66,17 @@ class MainWindow(QMainWindow):
         h_div.setStyleSheet("color: #2e3248;")
         v_lay.addWidget(h_div)
         v_lay.addWidget(self._input)
+
+        # Status bar — shows active model at bottom
+        from PyQt6.QtWidgets import QLabel
+        self._status_bar = QLabel("  ⚡ Ambrio ready — model: loading...")
+        self._status_bar.setStyleSheet(
+            "background: #0f111a; color: #475569; font-size: 10px; "
+            "font-family: 'Consolas', monospace; padding: 3px 12px; "
+            "border-top: 1px solid #1e2236;"
+        )
+        v_lay.addWidget(self._status_bar)
+
         h_lay.addWidget(right, stretch=1)
 
         # Create the default session in the sidebar
@@ -185,10 +196,20 @@ class MainWindow(QMainWindow):
         if session_id == self._session_id:
             self._chat.append_token(token)
 
-    def _on_done(self, session_id: str):
+    def _on_done(self, session_id: str, payload: dict):
         if session_id == self._session_id:
-            self._chat.finalize_assistant_message()
+            self._chat.finalize_assistant_message(meta=payload)
             self._input.set_enabled(True)
+            # Update status bar with last used model
+            model    = payload.get("model", "")
+            provider = payload.get("provider", "")
+            tokens   = payload.get("tokens",  0)
+            elapsed  = payload.get("elapsed", 0.0)
+            short_model = model.split("/", 1)[-1] if "/" in model else model
+            if model:
+                self._status_bar.setText(
+                    f"  ⚡ {provider} · {short_model} · last reply: {tokens} tok · {elapsed}s"
+                )
 
     def _on_tool_call(self, session_id: str, payload: dict):
         """Human-in-the-loop approval gate for tool execution."""

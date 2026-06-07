@@ -5,6 +5,16 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 
+# Provider colour accents
+_PROVIDER_COLORS = {
+    "groq":       "#22C55E",   # green
+    "gemini":     "#4285F4",   # Google blue
+    "openrouter": "#FF6B35",   # orange
+    "mistral":    "#7C3AED",   # purple
+    "cohere":     "#00B4D8",   # cyan
+    "xai":        "#E5E7EB",   # light grey
+    "ollama":     "#94A3B8",   # slate (local)
+}
 
 class MessageBubble(QFrame):
     def __init__(self, text: str, role: str):
@@ -14,6 +24,7 @@ class MessageBubble(QFrame):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 8, 12, 8)
+        layout.setSpacing(4)
 
         # Role label
         role_label = QLabel("You" if role == "user" else "⚡ Ambrio")
@@ -34,11 +45,36 @@ class MessageBubble(QFrame):
         self._content.setStyleSheet("color: #d4d8f0; line-height: 1.5;")
         layout.addWidget(self._content)
 
+        # Meta badge (hidden until set_meta() called)
+        self._meta = QLabel("")
+        self._meta.setVisible(False)
+        self._meta.setStyleSheet(
+            "color: #64748B; font-size: 10px; font-family: 'Consolas', monospace; "
+            "padding: 2px 0px; letter-spacing: 0.3px;"
+        )
+        layout.addWidget(self._meta)
+
     def append_token(self, token: str):
         self._content.setText(self._content.text() + token)
 
     def set_text(self, text: str):
         self._content.setText(text)
+
+    def set_meta(self, model: str, provider: str, tokens: int,
+                 elapsed: float, tool: str = ""):
+        """Show model badge below the reply once it's complete."""
+        color   = _PROVIDER_COLORS.get(provider, "#64748B")
+        # Short model name — strip provider prefix e.g. "groq/llama-3.3-70b" → "llama-3.3-70b"
+        short   = model.split("/", 1)[-1] if "/" in model else model
+        tool_str = f" · 🔧 {tool}" if tool else ""
+        self._meta.setText(
+            f'<span style="color:{color}">●</span> '
+            f'<span style="color:#94A3B8">{provider}</span> · '
+            f'<b style="color:#CBD5E1">{short}</b> · '
+            f'{tokens} tokens · {elapsed}s{tool_str}'
+        )
+        self._meta.setTextFormat(Qt.TextFormat.RichText)
+        self._meta.setVisible(True)
 
 
 class ChatWidget(QWidget):
@@ -52,7 +88,6 @@ class ChatWidget(QWidget):
         self._scroll.setWidgetResizable(True)
         self._scroll.setFrameShape(QFrame.Shape.NoFrame)
         self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        # Auto-scroll to bottom on content change
         self._scroll.verticalScrollBar().rangeChanged.connect(
             lambda: self._scroll.verticalScrollBar().setValue(
                 self._scroll.verticalScrollBar().maximum()
@@ -82,7 +117,15 @@ class ChatWidget(QWidget):
         if self._active_bubble:
             self._active_bubble.append_token(token)
 
-    def finalize_assistant_message(self) -> None:
+    def finalize_assistant_message(self, meta: dict | None = None) -> None:
+        if self._active_bubble and meta:
+            self._active_bubble.set_meta(
+                model   = meta.get("model",    "unknown"),
+                provider= meta.get("provider", "ollama"),
+                tokens  = meta.get("tokens",   0),
+                elapsed = meta.get("elapsed",  0.0),
+                tool    = meta.get("tool",     ""),
+            )
         self._active_bubble = None
 
     def add_system_notice(self, text: str) -> None:
