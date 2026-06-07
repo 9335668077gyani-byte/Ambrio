@@ -57,7 +57,7 @@ class MainWindow(QMainWindow):
 
         self._chat  = ChatWidget()
         self._input = InputBar()
-        self._input.submitted.connect(self._on_send)
+        self._input.submitted.connect(self._on_send)   # (text, files)
         v_lay.addWidget(self._chat, stretch=1)
 
         # Subtle divider above input
@@ -103,15 +103,47 @@ class MainWindow(QMainWindow):
     def _set_session(self, sid: str):
         self._session_id = sid
 
-    # ── Send / receive ────────────────────────────────────────────────────────
-    def _on_send(self, text: str):
-        self._chat.add_user_message(text)
+    # ── Send / receive ──────────────────────────────────────────────────────────────
+    def _on_send(self, text: str, files: list = None):
+        """Handle text + optional file attachments."""
+        from pathlib import Path
+        files = files or []
+
+        # Build enriched message: prepend file tool calls if attachments present
+        full_text = text
+        if files:
+            file_cmds = []
+            for f in files:
+                ext = Path(f).suffix.lower()
+                # Route to correct tool based on type
+                image_exts = {'.jpg','.jpeg','.png','.gif','.bmp','.webp','.tiff','.svg'}
+                doc_exts   = {'.pdf','.docx','.doc','.pptx','.xlsx','.xls','.csv','.odt'}
+                if ext in image_exts:
+                    file_cmds.append(f'doc_read("{f}")')
+                elif ext in doc_exts:
+                    file_cmds.append(f'doc_read("{f}")')
+                else:
+                    file_cmds.append(f'file_read("{f}")')
+
+            tools_prefix = '\n'.join(file_cmds)
+            full_text = f"{tools_prefix}\n\n{text}" if text else tools_prefix
+
+        # Show user message in chat (display version without raw tool calls)
+        display_text = text
+        if files:
+            names = [Path(f).name for f in files]
+            display_text = text
+            # Add file badges below the message
+            for name in names:
+                display_text += f'\n📎 {name}'
+
+        self._chat.add_user_message(display_text)
         self._chat.begin_assistant_message()
         self._input.set_enabled(False)
         self._bridge.send(Frame(
             session_id=self._session_id,
             type=MsgType.CHAT_REQUEST,
-            payload={"content": text}
+            payload={"content": full_text}
         ))
 
     def _on_token(self, session_id: str, token: str):
