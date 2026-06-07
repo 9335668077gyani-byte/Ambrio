@@ -35,6 +35,7 @@ PROVIDER_KEYS: dict[str, list[str]] = {
     "openrouter": _keys("OPENROUTER_API_KEYS"),
     "together":   _keys("TOGETHER_API_KEYS"),
     "cerebras":   _keys("CEREBRAS_API_KEYS"),
+    "xai":        _keys("XAI_API_KEYS"),        # Grok (xAI) — get key at console.x.ai
 }
 
 OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")

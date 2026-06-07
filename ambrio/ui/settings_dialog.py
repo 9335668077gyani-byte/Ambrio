@@ -240,6 +240,15 @@ PROVIDERS = [
         "tip":     "Free $1 credits on signup. Many open models.",
         "free":    True,
     },
+    {
+        "id":      "xai",
+        "name":    "xAI / Grok",
+        "env":     "XAI_API_KEYS",
+        "models":  ["grok-3-mini", "grok-3", "grok-2-1212"],
+        "url":     "https://console.x.ai",
+        "tip":     "Grok 3 Mini is free tier. Get your key at console.x.ai — starts with 'xai-'.",
+        "free":    True,
+    },
 ]
 
 ROUTING_TASKS = [
@@ -291,6 +300,16 @@ class ApiTestWorker(QThread):
                     data = json.loads(r.read())
                     free = [m for m in data.get("data", []) if ":free" in m.get("id", "")]
                     self.result.emit(self._provider, True, f"Valid — {len(free)} free models")
+
+            elif self._provider == "xai":
+                req = urllib.request.Request(
+                    "https://api.x.ai/v1/models",
+                    headers={"Authorization": f"Bearer {self._key}"}
+                )
+                with urllib.request.urlopen(req, timeout=8) as r:
+                    data = json.loads(r.read())
+                    count = len(data.get("data", []))
+                    self.result.emit(self._provider, True, f"Valid — {count} Grok models available")
 
             else:
                 self.result.emit(self._provider, True, "Key saved (live test not available yet)")

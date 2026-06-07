@@ -43,6 +43,7 @@ PROVIDER_BASE_URLS: dict[str, str] = {
     "mistral":    "https://api.mistral.ai/v1",
     "together":   "https://api.together.xyz/v1",
     "cerebras":   "https://api.cerebras.ai/v1",
+    "xai":        "https://api.x.ai/v1",           # Grok models by xAI
     "ollama":     "http://localhost:11434/v1",   # Ollama OpenAI-compat endpoint
     # Gemini uses its own SSE endpoint — handled separately in the adapter
     "gemini":     "https://generativelanguage.googleapis.com/v1beta",
@@ -198,6 +199,32 @@ REGISTRY: dict[str, ModelDef] = {
         context_k = 128,
         tier      = "free",
         strengths = ["reasoning"],
+    ),
+
+    # ── xAI / Grok ────────────────────────────────────────────────────────────────
+    "xai/grok-3-mini": ModelDef(
+        provider  = "xai",
+        model_id  = "grok-3-mini",
+        context_k = 131,
+        tier      = "free",
+        strengths = ["reasoning", "chat", "fast"],
+        notes     = "Grok 3 Mini — fast reasoning, free tier (May 2025)",
+    ),
+    "xai/grok-3": ModelDef(
+        provider  = "xai",
+        model_id  = "grok-3",
+        context_k = 131,
+        tier      = "paid",
+        strengths = ["chat", "reasoning", "code"],
+        notes     = "Grok 3 — flagship xAI model",
+    ),
+    "xai/grok-2": ModelDef(
+        provider  = "xai",
+        model_id  = "grok-2-1212",
+        context_k = 131,
+        tier      = "paid",
+        strengths = ["chat", "code"],
+        notes     = "Grok 2 — stable production model",
     ),
 }
 
