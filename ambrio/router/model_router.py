@@ -169,7 +169,7 @@ class ModelRouter:
             async for chunk in self._dispatch(alias, model, messages, tools):
                 yield chunk
         except Exception as e:
-            log.error(f"Model {alias} failed: {e} — falling back to Ollama")
+            log.error(f"Model {alias} FAILED ({type(e).__name__}: {e}) — falling back to Ollama")
             async for chunk in self._stream_ollama(messages, tools):
                 yield chunk
 
@@ -215,8 +215,9 @@ class ModelRouter:
             headers = {
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type":  "application/json",
+                # Real browser UA prevents Cloudflare 403/1010 blocks
+                "User-Agent":    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
             }
-            # OpenRouter requires these extra headers for app tracking
             if pool.provider == "openrouter":
                 headers["HTTP-Referer"] = "https://github.com/9335668077gyani-byte/Ambrio"
                 headers["X-Title"]      = "Ambrio Local AI"
@@ -240,7 +241,12 @@ class ModelRouter:
                             await asyncio.sleep(1.0 * (attempt + 1))
                             continue
                         if resp.status == 401:
-                            log.error(f"{pool.provider} invalid API key …{api_key[-4:]}")
+                            log.error(f"{pool.provider} invalid API key ...{api_key[-4:]}")
+                            pool.mark_limited()
+                            continue
+                        if resp.status == 403:
+                            body_text = await resp.text()
+                            log.error(f"{pool.provider} HTTP 403 — account/key issue: {body_text[:200]}")
                             pool.mark_limited()
                             continue
                         resp.raise_for_status()
@@ -263,7 +269,7 @@ class ModelRouter:
                         yield {"done": True}
                         return
             except Exception as e:
-                log.error(f"{pool.provider} attempt {attempt+1} error: {e}")
+                log.error(f"{pool.provider} attempt {attempt+1} FAILED: {type(e).__name__}: {e}")
                 if attempt == retries - 1:
                     raise
 
