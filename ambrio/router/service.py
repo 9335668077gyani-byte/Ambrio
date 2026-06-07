@@ -27,7 +27,7 @@ _TOOL_PATTERNS = [
      "sparepartspro_sql", "sql"),
 
     # memory_search("query", "session_id")  — session_id optional
-    (re.compile(r'memory_search\s*\(\s*["\'](.+?)["\']\s*(?:,\s*["\'].*?["\'])?\s*\)',
+    (re.compile(r'memory_search\s*\(\s*["\'](.+?)["\']\s*(?:,\s*["\'].*?["\']\s*)?\)',
                 re.IGNORECASE | re.DOTALL),
      "memory_search", "query"),
 
@@ -35,17 +35,25 @@ _TOOL_PATTERNS = [
     (re.compile(r'file_read\s*\(\s*["\'](.+?)["\']\s*\)', re.IGNORECASE | re.DOTALL),
      'file_read', 'path'),
 
+    # file_write("path", ...) — capture path only
+    (re.compile(r'file_write\s*\(\s*["\'](.+?)["\']', re.IGNORECASE | re.DOTALL),
+     'file_write', 'path'),
+
     # file_list("directory")
     (re.compile(r'file_list\s*\(\s*["\'](.+?)["\']\s*\)', re.IGNORECASE | re.DOTALL),
      'file_list', 'directory'),
 
-    # file_write("path", "content") - capture path only; content passed separately
-    (re.compile(r'file_write\s*\(\s*["\'](.+?)["\']', re.IGNORECASE | re.DOTALL),
-     'file_write', 'path'),
+    # file_search("pattern")
+    (re.compile(r'file_search\s*\(\s*["\'](.+?)["\']\s*\)', re.IGNORECASE | re.DOTALL),
+     'file_search', 'pattern'),
 
     # doc_read("path")
     (re.compile(r'doc_read\s*\(\s*["\'](.+?)["\']\s*\)', re.IGNORECASE | re.DOTALL),
      'doc_read', 'path'),
+
+    # doc_extract_table("path")
+    (re.compile(r'doc_extract_table\s*\(\s*["\'](.+?)["\']\s*\)', re.IGNORECASE | re.DOTALL),
+     'doc_extract_table', 'path'),
 
     # web_search("query")
     (re.compile(r'web_search\s*\(\s*["\'](.+?)["\']\s*\)', re.IGNORECASE | re.DOTALL),
@@ -63,21 +71,6 @@ _TOOL_PATTERNS = [
     (re.compile(r'github_search\s*\(\s*["\'](.+?)["\']\s*\)', re.IGNORECASE | re.DOTALL),
      'github_search', 'query'),
 
-    # file_read("path")
-    (re.compile(r'file_read\s*\(\s*["\'](.+?)["\']\s*\)', re.IGNORECASE | re.DOTALL),
-     'file_read', 'path'),
-
-    # file_list("directory")
-    (re.compile(r'file_list\s*\(\s*["\'](.+?)["\']\s*\)', re.IGNORECASE | re.DOTALL),
-     'file_list', 'directory'),
-
-    # file_search("pattern")
-    (re.compile(r'file_search\s*\(\s*["\'](.+?)["\']\s*\)', re.IGNORECASE | re.DOTALL),
-     'file_search', 'pattern'),
-
-    # doc_read("path")
-    (re.compile(r'doc_read\s*\(\s*["\'](.+?)["\']\s*\)', re.IGNORECASE | re.DOTALL),
-     'doc_read', 'path'),
 ]
 
 
