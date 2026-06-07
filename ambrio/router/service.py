@@ -54,6 +54,12 @@ class RouterService:
     async def start(self, db_path: str = "ambrio.db") -> None:
         await self.sessions.init(db_path)
 
+        # Build multi-model router from .env API keys
+        from ambrio.config import PROVIDER_KEYS
+        from ambrio.router.model_router import ModelRouter
+        self._model_router = ModelRouter(provider_keys=PROVIDER_KEYS)
+        self.sessions.set_model_router(self._model_router)
+
         # Import tools so @tool decorators register
         import ambrio.router.tools.memory_tool        # noqa
         import ambrio.router.tools.sparepartspro_tool  # noqa

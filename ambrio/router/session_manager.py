@@ -44,6 +44,7 @@ class SessionManager:
         self._brain:    BrainStore | None = None
         self._loop:     LearningLoop | None = None
         self._ollama:   OllamaClient = OllamaClient()
+        self._model_router = None   # set after init via set_model_router()
 
     async def init(self, db_path: str = "ambrio.db") -> None:
         self._db = Database(db_path)
@@ -74,9 +75,17 @@ class SessionManager:
                 )
                 await c.commit()
             self._sessions[session_id] = Session(
-                session_id, self._db, self._brain, self._ollama
+                session_id, self._db, self._brain,
+                self._model_router if self._model_router else self._ollama
             )
         return self._sessions[session_id]
+
+    def set_model_router(self, router) -> None:
+        """Inject the ModelRouter so new and existing sessions use it."""
+        self._model_router = router
+        for session in self._sessions.values():
+            session.ollama = router
+        log.info("ModelRouter injected into SessionManager")
 
     async def post_turn_tick(self, session_id: str) -> None:
         """
