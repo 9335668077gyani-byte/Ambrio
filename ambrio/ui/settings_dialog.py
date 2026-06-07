@@ -277,11 +277,14 @@ class ApiTestWorker(QThread):
         # Strip ALL whitespace/invisible chars — common paste problem
         key = self._key.strip().replace("\n", "").replace("\r", "").replace(" ", "")
 
+        # Cloudflare blocks Python's default urllib agent (error 1010) — use real browser UA
+        UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36"
+
         try:
             if self._provider == "groq":
                 req = urllib.request.Request(
                     "https://api.groq.com/openai/v1/models",
-                    headers={"Authorization": f"Bearer {key}"}
+                    headers={"Authorization": f"Bearer {key}", "User-Agent": UA}
                 )
                 with urllib.request.urlopen(req, timeout=10) as r:
                     data = json.loads(r.read())
@@ -290,7 +293,8 @@ class ApiTestWorker(QThread):
 
             elif self._provider == "gemini":
                 url = f"https://generativelanguage.googleapis.com/v1beta/models?key={key}"
-                with urllib.request.urlopen(url, timeout=10) as r:
+                req = urllib.request.Request(url, headers={"User-Agent": UA})
+                with urllib.request.urlopen(req, timeout=10) as r:
                     data = json.loads(r.read())
                     count = len(data.get("models", []))
                     self.result.emit(self._provider, True, f"Valid key — {count} models available")
@@ -298,7 +302,7 @@ class ApiTestWorker(QThread):
             elif self._provider == "openrouter":
                 req = urllib.request.Request(
                     "https://openrouter.ai/api/v1/models",
-                    headers={"Authorization": f"Bearer {key}"}
+                    headers={"Authorization": f"Bearer {key}", "User-Agent": UA}
                 )
                 with urllib.request.urlopen(req, timeout=10) as r:
                     data = json.loads(r.read())
@@ -308,7 +312,7 @@ class ApiTestWorker(QThread):
             elif self._provider == "xai":
                 req = urllib.request.Request(
                     "https://api.x.ai/v1/models",
-                    headers={"Authorization": f"Bearer {key}"}
+                    headers={"Authorization": f"Bearer {key}", "User-Agent": UA}
                 )
                 with urllib.request.urlopen(req, timeout=10) as r:
                     data = json.loads(r.read())
