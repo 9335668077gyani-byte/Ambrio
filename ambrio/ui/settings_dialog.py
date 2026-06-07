@@ -272,56 +272,75 @@ class ApiTestWorker(QThread):
         self._key      = api_key
 
     def run(self):
-        import urllib.request, json
+        import urllib.request, urllib.error, json
+
+        # Strip ALL whitespace/invisible chars — common paste problem
+        key = self._key.strip().replace("\n", "").replace("\r", "").replace(" ", "")
+
         try:
             if self._provider == "groq":
                 req = urllib.request.Request(
                     "https://api.groq.com/openai/v1/models",
-                    headers={"Authorization": f"Bearer {self._key}"}
+                    headers={"Authorization": f"Bearer {key}"}
                 )
-                with urllib.request.urlopen(req, timeout=8) as r:
+                with urllib.request.urlopen(req, timeout=10) as r:
                     data = json.loads(r.read())
                     count = len(data.get("data", []))
-                    self.result.emit(self._provider, True, f"Valid — {count} models available")
+                    self.result.emit(self._provider, True, f"Valid key — {count} models available")
 
             elif self._provider == "gemini":
-                url = f"https://generativelanguage.googleapis.com/v1beta/models?key={self._key}"
-                with urllib.request.urlopen(url, timeout=8) as r:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models?key={key}"
+                with urllib.request.urlopen(url, timeout=10) as r:
                     data = json.loads(r.read())
                     count = len(data.get("models", []))
-                    self.result.emit(self._provider, True, f"Valid — {count} models available")
+                    self.result.emit(self._provider, True, f"Valid key — {count} models available")
 
             elif self._provider == "openrouter":
                 req = urllib.request.Request(
                     "https://openrouter.ai/api/v1/models",
-                    headers={"Authorization": f"Bearer {self._key}"}
+                    headers={"Authorization": f"Bearer {key}"}
                 )
-                with urllib.request.urlopen(req, timeout=8) as r:
+                with urllib.request.urlopen(req, timeout=10) as r:
                     data = json.loads(r.read())
                     free = [m for m in data.get("data", []) if ":free" in m.get("id", "")]
-                    self.result.emit(self._provider, True, f"Valid — {len(free)} free models")
+                    self.result.emit(self._provider, True, f"Valid key — {len(free)} free models")
 
             elif self._provider == "xai":
                 req = urllib.request.Request(
                     "https://api.x.ai/v1/models",
-                    headers={"Authorization": f"Bearer {self._key}"}
+                    headers={"Authorization": f"Bearer {key}"}
                 )
-                with urllib.request.urlopen(req, timeout=8) as r:
+                with urllib.request.urlopen(req, timeout=10) as r:
                     data = json.loads(r.read())
                     count = len(data.get("data", []))
-                    self.result.emit(self._provider, True, f"Valid — {count} Grok models available")
+                    self.result.emit(self._provider, True, f"Valid key — {count} Grok models")
 
             else:
-                self.result.emit(self._provider, True, "Key saved (live test not available yet)")
+                self.result.emit(self._provider, True, "Key saved (live test not available)")
 
+        except urllib.error.HTTPError as e:
+            # Read real error body from the API
+            try:
+                body = json.loads(e.read().decode())
+                api_msg = (
+                    body.get("error", {}).get("message")
+                    or body.get("message")
+                    or str(e)
+                )
+            except Exception:
+                api_msg = str(e)
+            if e.code in (401, 403):
+                self.result.emit(self._provider, False,
+                    f"Invalid key (HTTP {e.code}): {api_msg[:120]}")
+            else:
+                self.result.emit(self._provider, False,
+                    f"API error {e.code}: {api_msg[:120]}")
         except Exception as e:
             msg = str(e)
-            if "401" in msg or "403" in msg or "invalid" in msg.lower():
-                self.result.emit(self._provider, False, "Invalid API key")
-            elif "timeout" in msg.lower():
-                self.result.emit(self._provider, False, "Request timed out")
+            if "timeout" in msg.lower():
+                self.result.emit(self._provider, False, "Request timed out — check internet")
             else:
-                self.result.emit(self._provider, False, f"Error: {msg[:80]}")
+                self.result.emit(self._provider, False, f"Error: {msg[:100]}")
 
 
 # ── Key row widget ─────────────────────────────────────────────────────────────
@@ -480,11 +499,15 @@ class ProviderTab(QWidget):
             # Try first saved key
             keys = self.get_keys()
             if not keys:
-                self._set_status("No key to test", False)
+                self._set_status("Paste a key first", False)
                 return
             key = keys[0]
 
-        self._set_status("Testing…", None)
+        if len(key) < 20:
+            self._set_status("Key looks too short — check paste", False)
+            return
+
+        self._set_status("Testing… (may take a few seconds)", None)
         w = ApiTestWorker(self._provider["id"], key)
         w.result.connect(self._on_test_result)
         self._workers.append(w)
