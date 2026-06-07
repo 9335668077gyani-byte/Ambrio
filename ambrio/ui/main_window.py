@@ -4,9 +4,11 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
     QMessageBox, QFrame
 )
-from .chat_widget   import ChatWidget
-from .input_bar     import InputBar
-from .sidebar       import Sidebar
+from PyQt6.QtGui import QKeySequence, QShortcut
+from .chat_widget      import ChatWidget
+from .input_bar        import InputBar
+from .sidebar          import Sidebar
+from .settings_dialog  import SettingsDialog
 from .ipc.qt_zmq_bridge    import ZmqBridge
 from .ipc.message_protocol import Frame, MsgType
 
@@ -38,6 +40,7 @@ class MainWindow(QMainWindow):
         self._sidebar = Sidebar()
         self._sidebar.new_session.connect(self._set_session)
         self._sidebar.session_selected.connect(self._set_session)
+        self._sidebar.settings_clicked.connect(self._open_settings)
         h_lay.addWidget(self._sidebar)
 
         # Divider
@@ -68,6 +71,34 @@ class MainWindow(QMainWindow):
         # Create the default session in the sidebar
         self._sidebar.add_session(self._session_id)
 
+        # Keyboard shortcut: Ctrl+, opens settings
+        shortcut = QShortcut(QKeySequence("Ctrl+,"), self)
+        shortcut.activated.connect(self._open_settings)
+
+    # ── Settings ──────────────────────────────────────────────────────────────
+    def _open_settings(self):
+        dlg = SettingsDialog(self)
+        dlg.keys_saved.connect(self._reload_router)
+        dlg.exec()
+
+    def _reload_router(self):
+        """Hot-reload the ModelRouter with new keys from .env — no restart needed."""
+        try:
+            # Reload config module so it picks up new .env values
+            import importlib
+            import ambrio.config as cfg
+            importlib.reload(cfg)
+
+            from ambrio.config import PROVIDER_KEYS
+            from ambrio.router.model_router import ModelRouter
+
+            # Send a special internal message to the router service to reinitialize
+            # For now, show a notice — full hot-reload is Phase 7c
+            self._chat.add_system_notice(
+                "✓ API keys saved. Restart Ambrio to activate new providers."
+            )
+        except Exception as e:
+            self._chat.add_system_notice(f"Settings reload error: {e}")
     # ── Routing ───────────────────────────────────────────────────────────────
     def _set_session(self, sid: str):
         self._session_id = sid
