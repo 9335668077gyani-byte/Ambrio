@@ -106,78 +106,70 @@ class MainWindow(QMainWindow):
     # ── Send / receive ──────────────────────────────────────────────────────────────
     def _on_send(self, text: str, files: list = None):
         """Handle text + optional file attachments.
-        Files are read directly here — content injected into the prompt.
-        No model hallucination of tool calls.
+        Files are read synchronously here — content injected into the prompt.
         """
-        import asyncio
         from pathlib import Path
         files = files or []
 
         # ── Build display text shown in chat bubble ───────────────────────────
         display_text = text or ""
         if files:
-            names = [Path(f).name for f in files]
-            for name in names:
-                display_text += f"\n📎 {name}"
+            for f in files:
+                display_text += f"\n📎 {Path(f).name}"
 
-        # ── Read each file right now and inject real content ──────────────────
+        # ── Read each file synchronously and inject real content ──────────────
         injected_blocks = []
         if files:
+            from ambrio.router.tools.doc_tool import (
+                _read_pdf, _read_docx, _read_xlsx, _read_image_ocr
+            )
             for f in files:
                 p = Path(f)
                 ext = p.suffix.lower()
                 try:
-                    doc_exts = {'.pdf','.docx','.doc','.pptx','.xlsx',
-                                '.xls','.csv','.odt'}
-                    img_exts = {'.jpg','.jpeg','.png','.gif','.bmp',
-                                '.webp','.tiff','.svg'}
+                    if not p.exists():
+                        injected_blocks.append(
+                            f"[FILE: {p.name}]\nError: File not found at {f}"
+                        )
+                        continue
 
-                    if ext in doc_exts or ext in img_exts:
-                        # Run async doc_read directly
-                        from ambrio.router.tools.doc_tool import doc_read
-                        result = asyncio.get_event_loop().run_until_complete(
-                            doc_read(f)
-                        ) if asyncio.get_event_loop().is_running() else (
-                            asyncio.new_event_loop().run_until_complete(doc_read(f))
-                        )
-                        if "error" in result:
-                            injected_blocks.append(
-                                f"[FILE: {p.name}]\nError reading file: {result['error']}"
-                            )
-                        else:
-                            content = result.get("content", "")
-                            trunc = " (truncated)" if result.get("truncated") else ""
-                            injected_blocks.append(
-                                f"[FILE: {p.name} | type: {ext}{trunc}]\n{content}"
-                            )
+                    if ext == '.pdf':
+                        content = _read_pdf(p)
+                    elif ext in ('.docx', '.doc'):
+                        content = _read_docx(p)
+                    elif ext in ('.xlsx', '.xls'):
+                        content = _read_xlsx(p)
+                    elif ext == '.csv':
+                        content = p.read_text(encoding='utf-8', errors='replace')
+                    elif ext in ('.png','.jpg','.jpeg','.bmp','.tiff','.webp','.gif'):
+                        content = _read_image_ocr(p)
                     else:
-                        # Plain text / code file
-                        from ambrio.router.tools.file_tool import file_read
-                        result = asyncio.new_event_loop().run_until_complete(
-                            file_read(f)
-                        )
-                        if "error" in result:
-                            injected_blocks.append(
-                                f"[FILE: {p.name}]\nError: {result['error']}"
-                            )
-                        else:
-                            injected_blocks.append(
-                                f"[FILE: {p.name}]\n{result.get('content','')}"
-                            )
+                        # Any text/code file
+                        content = p.read_text(encoding='utf-8', errors='replace')
+
+                    # Truncate to 6000 chars to stay within context budget
+                    truncated = len(content) > 6000
+                    snippet = content[:6000]
+                    trunc_note = " [truncated to 6000 chars]" if truncated else ""
+                    injected_blocks.append(
+                        f"[FILE: {p.name} | type: {ext}{trunc_note}]\n{snippet}"
+                    )
                 except Exception as e:
-                    injected_blocks.append(f"[FILE: {p.name}]\nCould not read: {e}")
+                    injected_blocks.append(
+                        f"[FILE: {p.name}]\nCould not read file: {e}"
+                    )
 
         # ── Compose final message sent to router ──────────────────────────────
         parts = []
         if injected_blocks:
             parts.append(
-                "The user has attached the following file(s). "
-                "Use their ACTUAL content to answer:\n\n"
+                "The user attached the following file(s). "
+                "Answer using their ACTUAL content below:\n\n"
                 + "\n\n---\n\n".join(injected_blocks)
             )
         if text:
             parts.append(text)
-        full_text = "\n\n".join(parts) if parts else display_text
+        full_text = "\n\n".join(parts) if parts else (text or "")
 
         # ── Send to UI and router ─────────────────────────────────────────────
         self._chat.add_user_message(display_text)
