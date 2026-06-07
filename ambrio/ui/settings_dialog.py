@@ -329,9 +329,18 @@ class ApiTestWorker(QThread):
                 )
             except Exception:
                 api_msg = str(e)
-            if e.code in (401, 403):
+
+            if e.code == 403 and self._provider == "groq":
                 self.result.emit(self._provider, False,
-                    f"Invalid key (HTTP {e.code}): {api_msg[:120]}")
+                    "HTTP 403 — Your Groq account needs PHONE VERIFICATION.\n"
+                    "Go to console.groq.com → click your avatar → Verify Phone Number. "
+                    "Then the key will work.")
+            elif e.code == 401:
+                self.result.emit(self._provider, False,
+                    f"HTTP 401 — Key rejected. Check you copied the full key. Detail: {api_msg[:100]}")
+            elif e.code == 403:
+                self.result.emit(self._provider, False,
+                    f"HTTP 403 — Account not activated or region blocked. Detail: {api_msg[:100]}")
             else:
                 self.result.emit(self._provider, False,
                     f"API error {e.code}: {api_msg[:120]}")
