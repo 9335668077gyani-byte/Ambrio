@@ -105,38 +105,81 @@ class MainWindow(QMainWindow):
 
     # ── Send / receive ──────────────────────────────────────────────────────────────
     def _on_send(self, text: str, files: list = None):
-        """Handle text + optional file attachments."""
+        """Handle text + optional file attachments.
+        Files are read directly here — content injected into the prompt.
+        No model hallucination of tool calls.
+        """
+        import asyncio
         from pathlib import Path
         files = files or []
 
-        # Build enriched message: prepend file tool calls if attachments present
-        full_text = text
-        if files:
-            file_cmds = []
-            for f in files:
-                ext = Path(f).suffix.lower()
-                # Route to correct tool based on type
-                image_exts = {'.jpg','.jpeg','.png','.gif','.bmp','.webp','.tiff','.svg'}
-                doc_exts   = {'.pdf','.docx','.doc','.pptx','.xlsx','.xls','.csv','.odt'}
-                if ext in image_exts:
-                    file_cmds.append(f'doc_read("{f}")')
-                elif ext in doc_exts:
-                    file_cmds.append(f'doc_read("{f}")')
-                else:
-                    file_cmds.append(f'file_read("{f}")')
-
-            tools_prefix = '\n'.join(file_cmds)
-            full_text = f"{tools_prefix}\n\n{text}" if text else tools_prefix
-
-        # Show user message in chat (display version without raw tool calls)
-        display_text = text
+        # ── Build display text shown in chat bubble ───────────────────────────
+        display_text = text or ""
         if files:
             names = [Path(f).name for f in files]
-            display_text = text
-            # Add file badges below the message
             for name in names:
-                display_text += f'\n📎 {name}'
+                display_text += f"\n📎 {name}"
 
+        # ── Read each file right now and inject real content ──────────────────
+        injected_blocks = []
+        if files:
+            for f in files:
+                p = Path(f)
+                ext = p.suffix.lower()
+                try:
+                    doc_exts = {'.pdf','.docx','.doc','.pptx','.xlsx',
+                                '.xls','.csv','.odt'}
+                    img_exts = {'.jpg','.jpeg','.png','.gif','.bmp',
+                                '.webp','.tiff','.svg'}
+
+                    if ext in doc_exts or ext in img_exts:
+                        # Run async doc_read directly
+                        from ambrio.router.tools.doc_tool import doc_read
+                        result = asyncio.get_event_loop().run_until_complete(
+                            doc_read(f)
+                        ) if asyncio.get_event_loop().is_running() else (
+                            asyncio.new_event_loop().run_until_complete(doc_read(f))
+                        )
+                        if "error" in result:
+                            injected_blocks.append(
+                                f"[FILE: {p.name}]\nError reading file: {result['error']}"
+                            )
+                        else:
+                            content = result.get("content", "")
+                            trunc = " (truncated)" if result.get("truncated") else ""
+                            injected_blocks.append(
+                                f"[FILE: {p.name} | type: {ext}{trunc}]\n{content}"
+                            )
+                    else:
+                        # Plain text / code file
+                        from ambrio.router.tools.file_tool import file_read
+                        result = asyncio.new_event_loop().run_until_complete(
+                            file_read(f)
+                        )
+                        if "error" in result:
+                            injected_blocks.append(
+                                f"[FILE: {p.name}]\nError: {result['error']}"
+                            )
+                        else:
+                            injected_blocks.append(
+                                f"[FILE: {p.name}]\n{result.get('content','')}"
+                            )
+                except Exception as e:
+                    injected_blocks.append(f"[FILE: {p.name}]\nCould not read: {e}")
+
+        # ── Compose final message sent to router ──────────────────────────────
+        parts = []
+        if injected_blocks:
+            parts.append(
+                "The user has attached the following file(s). "
+                "Use their ACTUAL content to answer:\n\n"
+                + "\n\n---\n\n".join(injected_blocks)
+            )
+        if text:
+            parts.append(text)
+        full_text = "\n\n".join(parts) if parts else display_text
+
+        # ── Send to UI and router ─────────────────────────────────────────────
         self._chat.add_user_message(display_text)
         self._chat.begin_assistant_message()
         self._input.set_enabled(False)
