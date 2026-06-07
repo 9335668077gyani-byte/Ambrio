@@ -4,11 +4,19 @@ from typing import Callable, Any
 
 _REGISTRY: dict[str, Callable] = {}
 
-def tool(name: str | None = None):
-    """Decorator to register an async function as an RPC-callable tool."""
+def tool(name: str | None = None, description: str | None = None):
+    """Decorator to register an async function as an RPC-callable tool.
+
+    Args:
+        name:        Override the tool name (defaults to function name)
+        description: Short description (falls back to docstring in schema)
+    """
     def decorator(fn: Callable) -> Callable:
         key = name or fn.__name__
         assert inspect.iscoroutinefunction(fn), f"Tool '{key}' must be async"
+        # Store description override on the function for schema()
+        if description:
+            fn._tool_description = description
         _REGISTRY[key] = fn
 
         @functools.wraps(fn)
@@ -29,11 +37,12 @@ class ToolRegistry:
         schemas = []
         for name, fn in _REGISTRY.items():
             sig = inspect.signature(fn)
+            desc = getattr(fn, '_tool_description', None) or (fn.__doc__ or "").strip()
             schemas.append({
                 "type": "function",
                 "function": {
                     "name":        name,
-                    "description": (fn.__doc__ or "").strip(),
+                    "description": desc,
                     "parameters": {
                         "type":       "object",
                         "properties": {
