@@ -163,19 +163,22 @@ class MainWindow(QMainWindow):
                     snippet = content[:6000]
                     trunc_note = " [truncated to 6000 chars]" if truncated else ""
                     injected_blocks.append(
-                        f"[FILE: {p.name} | type: {ext}{trunc_note}]\n{snippet}"
+                        f"[FILE: {p.name} | path: {f} | type: {ext}{trunc_note}]\n{snippet}"
                     )
                 except Exception as e:
                     injected_blocks.append(
-                        f"[FILE: {p.name}]\nCould not read file: {e}"
+                        f"[FILE: {p.name} | path: {f}]\nCould not read file: {e}"
                     )
 
         # ── Compose final message sent to router ──────────────────────────────
         parts = []
         if injected_blocks:
             parts.append(
-                "The user attached the following file(s). "
-                "Answer using their ACTUAL content below:\n\n"
+                "The user attached the following file(s).\n"
+                "- To READ/SUMMARIZE: use the content shown below.\n"
+                "- To EDIT and SAVE: make your changes, then call "
+                "file_write(\"<path>\", \"<full edited content>\") "
+                "using the exact path shown in the FILE header.\n\n"
                 + "\n\n---\n\n".join(injected_blocks)
             )
         if text:
