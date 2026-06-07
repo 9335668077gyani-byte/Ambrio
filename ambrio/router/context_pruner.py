@@ -2,6 +2,7 @@
 import tiktoken
 from .memory.fts5_store  import FTS5Store
 from .memory.brain_store import BrainStore
+from .memory.token_compressor import compress_messages, compress_text
 
 CONTEXT_BUDGET   = 7000   # tokens — leaves ~1192 for response
 RECENT_MSGS_KEEP = 6      # always keep last N verbatim
@@ -56,6 +57,8 @@ class ContextPruner:
 
         budget  = CONTEXT_BUDGET - self._tokens(system)
         context = self._fit(recalled + recent, budget)
+        # Compress context to save tokens before sending to LLM
+        context = compress_messages(context, max_tokens=3800)
         return system + context + [{"role": "user", "content": new_content}]
 
     async def _recall(self, query: str, exclude: list[dict]) -> list[dict]:

@@ -3,6 +3,7 @@ import asyncio, zmq, zmq.asyncio, msgpack, logging, re, json
 from .session_manager import SessionManager
 from .tool_registry import ToolRegistry
 from ..ui.ipc.message_protocol import Frame, MsgType
+from ambrio.router.memory.token_compressor import compress_text
 
 log = logging.getLogger(__name__)
 
@@ -29,6 +30,38 @@ _TOOL_PATTERNS = [
     (re.compile(r'memory_search\s*\(\s*["\'](.+?)["\']\s*(?:,\s*["\'].*?["\'])?\s*\)',
                 re.IGNORECASE | re.DOTALL),
      "memory_search", "query"),
+
+    # file_read("path")
+    (re.compile(r'file_read\s*\(\s*["\'](.+?)["\']\s*\)', re.IGNORECASE | re.DOTALL),
+     'file_read', 'path'),
+
+    # file_list("directory")
+    (re.compile(r'file_list\s*\(\s*["\'](.+?)["\']\s*\)', re.IGNORECASE | re.DOTALL),
+     'file_list', 'directory'),
+
+    # file_write("path", "content") - capture path only; content passed separately
+    (re.compile(r'file_write\s*\(\s*["\'](.+?)["\']', re.IGNORECASE | re.DOTALL),
+     'file_write', 'path'),
+
+    # doc_read("path")
+    (re.compile(r'doc_read\s*\(\s*["\'](.+?)["\']\s*\)', re.IGNORECASE | re.DOTALL),
+     'doc_read', 'path'),
+
+    # web_search("query")
+    (re.compile(r'web_search\s*\(\s*["\'](.+?)["\']\s*\)', re.IGNORECASE | re.DOTALL),
+     'web_search', 'query'),
+
+    # web_read("url")
+    (re.compile(r'web_read\s*\(\s*["\'](.+?)["\']\s*\)', re.IGNORECASE | re.DOTALL),
+     'web_read', 'url'),
+
+    # reddit_search("query")
+    (re.compile(r'reddit_search\s*\(\s*["\'](.+?)["\']\s*\)', re.IGNORECASE | re.DOTALL),
+     'reddit_search', 'query'),
+
+    # github_search("query")
+    (re.compile(r'github_search\s*\(\s*["\'](.+?)["\']\s*\)', re.IGNORECASE | re.DOTALL),
+     'github_search', 'query'),
 ]
 
 
@@ -64,6 +97,9 @@ class RouterService:
         import ambrio.router.tools.memory_tool        # noqa
         import ambrio.router.tools.sparepartspro_tool  # noqa
         import ambrio.router.tools.sandbox_tool        # noqa
+        import ambrio.router.tools.file_tool           # noqa
+        import ambrio.router.tools.doc_tool            # noqa
+        import ambrio.router.tools.web_tool            # noqa
 
         ctx = zmq.asyncio.Context()
         self._socket = ctx.socket(zmq.ROUTER)
@@ -175,6 +211,9 @@ class RouterService:
             final_answer = f"I ran into an issue: {result['error']}"
         else:
             final_answer = json.dumps(result, default=str)[:500]
+
+        # Compress tool result to save tokens
+        final_answer = compress_text(final_answer, max_tokens=400)
 
         # Stream the answer token by token (word-by-word for smooth UX)
         words = final_answer.split()
