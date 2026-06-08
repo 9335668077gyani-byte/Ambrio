@@ -59,8 +59,8 @@ _TOOL_PATTERNS = [
     (re.compile(r'doc_save\s*\(\s*["\'](.+?)["\']\s*,', re.IGNORECASE | re.DOTALL),
      'doc_save', 'path'),
 
-    # doc_convert("path", "to_format")
-    (re.compile(r'doc_convert\s*\(\s*["\'](.+?)["\']\s*,\s*["\'](\w+)["\']\s*\)', re.IGNORECASE),
+    # doc_convert("path", "to_format") — capture path, format extracted separately below
+    (re.compile(r'doc_convert\s*\(\s*["\'](.+?)["\']\s*,\s*["\']([\w]+)["\']\s*\)', re.IGNORECASE),
      'doc_convert', 'path'),
 
     # web_search("query")
@@ -84,6 +84,14 @@ _TOOL_PATTERNS = [
 
 def _extract_text_tool_call(text: str) -> tuple[str, dict] | None:
     """Return (tool_name, kwargs) if a text-format tool call is found."""
+    # Special case: doc_convert needs two args (path + format)
+    m = re.search(
+        r'doc_convert\s*\(\s*["\'](.+?)["\']\s*,\s*["\']([\w]+)["\']\s*\)',
+        text, re.IGNORECASE
+    )
+    if m:
+        return 'doc_convert', {'path': m.group(1).strip(), 'to': m.group(2).strip()}
+
     for pattern, tool_name, arg_name in _TOOL_PATTERNS:
         m = pattern.search(text)
         if m:
