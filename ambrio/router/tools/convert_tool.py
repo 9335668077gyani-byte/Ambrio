@@ -196,53 +196,42 @@ async def doc_convert(path: str, to: str) -> dict:
             wb.save(str(out))
             return _ok(out, 'CSV → Excel')
 
-        # ── IMAGE → PDF ───────────────────────────────────────────────────────
+        # ── IMAGE → PDF ── scan-style (page = image, no white borders) ─────────
         elif src_ext in ('.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.webp', '.gif') and tgt_ext == 'pdf':
             try:
                 from PIL import Image as PILImage
 
                 img = PILImage.open(str(src))
 
-                # Handle RGBA/palette modes
-                if img.mode in ('RGBA', 'P', 'LA'):
+                # Normalise colour mode
+                if img.mode in ('RGBA', 'LA', 'PA'):
                     bg = PILImage.new('RGB', img.size, (255, 255, 255))
-                    if img.mode == 'P':
-                        img = img.convert('RGBA')
-                    bg.paste(img, mask=img.split()[-1] if img.mode in ('RGBA', 'LA') else None)
+                    bg.paste(img.convert('RGBA'), mask=img.convert('RGBA').split()[-1])
                     img = bg
-                else:
+                elif img.mode == 'P':
+                    img = img.convert('RGB')
+                elif img.mode != 'RGB':
                     img = img.convert('RGB')
 
-                # A4 at 150 DPI (enough for sharp ID cards)
-                DPI       = 150
-                A4_W_PX   = int(8.27  * DPI)   # 1240 px
-                A4_H_PX   = int(11.69 * DPI)   # 1753 px
-                MARGIN_PX = int(0.4   * DPI)   # 60 px
+                DPI = 200
 
+                # Upscale tiny images (WhatsApp thumbnails etc.) to min 1200px
                 img_w, img_h = img.size
+                long_side = max(img_w, img_h)
+                if long_side < 1200:
+                    scale = 1200 / long_side
+                    img = img.resize(
+                        (int(img_w * scale), int(img_h * scale)),
+                        PILImage.LANCZOS
+                    )
 
-                # Auto-rotate: if image is wider than tall → landscape page
-                if img_w > img_h:
-                    canvas_w, canvas_h = A4_H_PX, A4_W_PX   # landscape
-                else:
-                    canvas_w, canvas_h = A4_W_PX, A4_H_PX   # portrait
+                # Page size = image size (scanner-style, zero white border)
+                img.save(str(out), format='PDF', resolution=DPI)
 
-                # Scale image to fit canvas with margin
-                max_w = canvas_w - 2 * MARGIN_PX
-                max_h = canvas_h - 2 * MARGIN_PX
-                scale = min(max_w / img_w, max_h / img_h)
-                new_w = int(img_w * scale)
-                new_h = int(img_h * scale)
-                img   = img.resize((new_w, new_h), PILImage.LANCZOS)
+                w, h = img.size
+                orient = 'landscape' if w > h else 'portrait'
+                return _ok(out, f'Image → PDF ({orient}, {w}×{h}px, no borders)')
 
-                # Paste onto white A4 canvas centered
-                canvas = PILImage.new('RGB', (canvas_w, canvas_h), (255, 255, 255))
-                x_off  = (canvas_w - new_w) // 2
-                y_off  = (canvas_h - new_h) // 2
-                canvas.paste(img, (x_off, y_off))
-
-                canvas.save(str(out), format='PDF', resolution=DPI)
-                return _ok(out, f'Image → A4 PDF ({"landscape" if img_w > img_h else "portrait"}, {DPI} DPI)')
             except ImportError:
                 return {'error': 'Install Pillow: pip install Pillow', 'success': False}
 
