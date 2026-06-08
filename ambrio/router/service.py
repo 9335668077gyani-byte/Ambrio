@@ -59,6 +59,10 @@ _TOOL_PATTERNS = [
     (re.compile(r'doc_save\s*\(\s*["\'](.+?)["\']\s*,', re.IGNORECASE | re.DOTALL),
      'doc_save', 'path'),
 
+    # doc_convert("path", "to_format")
+    (re.compile(r'doc_convert\s*\(\s*["\'](.+?)["\']\s*,\s*["\'](\w+)["\']\s*\)', re.IGNORECASE),
+     'doc_convert', 'path'),
+
     # web_search("query")
     (re.compile(r'web_search\s*\(\s*["\'](.+?)["\']\s*\)', re.IGNORECASE | re.DOTALL),
      'web_search', 'query'),
@@ -112,6 +116,7 @@ class RouterService:
         import ambrio.router.tools.sandbox_tool        # noqa
         import ambrio.router.tools.file_tool           # noqa
         import ambrio.router.tools.doc_tool            # noqa
+        import ambrio.router.tools.convert_tool        # noqa
         import ambrio.router.tools.web_tool            # noqa
 
         ctx = zmq.asyncio.Context()
