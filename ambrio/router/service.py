@@ -79,6 +79,14 @@ _TOOL_PATTERNS = [
     (re.compile(r'github_search\s*\(\s*["\'](.+?)["\']\s*\)', re.IGNORECASE | re.DOTALL),
      'github_search', 'query'),
 
+    # file_open("path")
+    (re.compile(r'file_open\s*\(\s*["\'](.+?)["\']\s*\)', re.IGNORECASE | re.DOTALL),
+     'file_open', 'path'),
+
+    # file_show("path")
+    (re.compile(r'file_show\s*\(\s*["\'](.+?)["\']\s*\)', re.IGNORECASE | re.DOTALL),
+     'file_show', 'path'),
+
 ]
 
 

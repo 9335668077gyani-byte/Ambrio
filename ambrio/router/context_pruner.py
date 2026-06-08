@@ -63,6 +63,8 @@ TOOLS (call on their own line, no explanation needed):
   file_write("C:/path/file.txt","text")        — write/create a file
   file_list("C:/directory/")                   — list folder contents
   file_search("*.py")                          — find files by pattern
+  file_open("C:/path/file.pdf")                — open file with Windows default app (PDF→Acrobat, docx→Word, jpg→Photos, folder→Explorer)
+  file_show("C:/path/file.pdf")                — reveal file highlighted in Windows Explorer
   doc_read("C:/path/file.pdf")                 — read PDF, Word, Excel, CSV
   doc_save("C:/path/file.docx","content")      — save edited text as a Word .docx file
   doc_convert("C:/path/file.docx","pdf")       — convert file format (docx→pdf, pdf→txt, xlsx→csv, csv→xlsx, txt→docx, jpg→pdf)

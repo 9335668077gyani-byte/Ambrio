@@ -161,3 +161,75 @@ async def file_search(pattern: str, directory: str = 'C:\\Users', max_results: i
         }
     except Exception as e:
         return {'error': str(e), 'pattern': pattern}
+
+
+@tool(
+    name='file_open',
+    description=(
+        'Open a file or folder with the default Windows application. '
+        'Examples: open a PDF in Acrobat, a Word doc in Word, a folder in Explorer, '
+        'an image in Photos, a video in Media Player. '
+        'Args: path (str) — absolute path to file or folder to open.'
+    )
+)
+async def file_open(path: str) -> dict:
+    """
+    Open a file or folder with the OS default application (like double-clicking).
+    Args:
+        path: Absolute path to the file or folder to open.
+    """
+    try:
+        p = Path(path).expanduser().resolve()
+        if not p.exists():
+            # Try searching for it nearby
+            return {
+                'error': f'File not found: {path}',
+                'tip':   'Use file_search("filename") to locate the file first.',
+                'success': False
+            }
+        os.startfile(str(p))
+        kind = 'folder' if p.is_dir() else 'file'
+        return {
+            'success':  True,
+            'opened':   str(p),
+            'type':     kind,
+            'answer':   f'✅ Opened {kind}: {p.name}',
+        }
+    except Exception as e:
+        return {'error': str(e), 'path': path, 'success': False}
+
+
+@tool(
+    name='file_show',
+    description=(
+        'Reveal / show a file in Windows Explorer (highlights the file in its folder). '
+        'Useful when the user says "show me the file", "where is it", "open the folder". '
+        'Args: path (str) — absolute path to the file.'
+    )
+)
+async def file_show(path: str) -> dict:
+    """
+    Reveal a file in Windows Explorer.
+    Args:
+        path: Absolute path to the file to reveal.
+    """
+    try:
+        import subprocess
+        p = Path(path).expanduser().resolve()
+        if p.is_file():
+            # Select the specific file in Explorer
+            subprocess.Popen(['explorer', '/select,', str(p)])
+            return {
+                'success': True,
+                'answer':  f'📂 Showing {p.name} in Explorer',
+            }
+        elif p.is_dir():
+            subprocess.Popen(['explorer', str(p)])
+            return {
+                'success': True,
+                'answer':  f'📂 Opened folder: {p.name}',
+            }
+        else:
+            return {'error': f'Path not found: {path}', 'success': False}
+    except Exception as e:
+        return {'error': str(e), 'path': path, 'success': False}
