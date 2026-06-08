@@ -345,6 +345,23 @@ class InputBar(QWidget):
         )
         row_lay.addWidget(self._attach_btn)
 
+        # File Manager toggle button
+        self._fm_btn = QPushButton("📁")
+        self._fm_btn.setObjectName("fmBtn")
+        self._fm_btn.setFixedSize(44, 44)
+        self._fm_btn.setToolTip("Open File Manager (Ctrl+E)")
+        self._fm_btn.setStyleSheet(
+            "QPushButton#fmBtn {"
+            "  background: #1C1917; border: 1px solid #3D3836;"
+            "  border-radius: 8px; font-size: 18px; color: #A8A29E;"
+            "}"
+            "QPushButton#fmBtn:hover {"
+            "  border-color: #6366f1; color: #6366f1; background: #6366f111;"
+            "}"
+        )
+        # Will be connected to main_window after construction
+        row_lay.addWidget(self._fm_btn)
+
         # Text input
         self._input = _MultiInputEdit()
         self._input.setObjectName("chatInput")
@@ -408,3 +425,12 @@ class InputBar(QWidget):
         self._attach_btn.setEnabled(enabled)
         if enabled:
             self._input.setFocus()
+
+    def attach_file(self, path: str):
+        """Programmatically attach a file (called from the file manager panel)."""
+        self._add_files([path])
+        self._input.setFocus()
+
+    def connect_file_manager(self, toggle_fn):
+        """Connect the 📁 button to the file manager toggle function."""
+        self._fm_btn.clicked.connect(toggle_fn)

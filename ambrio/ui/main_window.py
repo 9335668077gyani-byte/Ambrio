@@ -9,6 +9,7 @@ from .chat_widget      import ChatWidget
 from .input_bar        import InputBar
 from .sidebar          import Sidebar
 from .settings_dialog  import SettingsDialog
+from .file_manager     import FileManagerPanel
 from .ipc.qt_zmq_bridge    import ZmqBridge
 from .ipc.message_protocol import Frame, MsgType
 
@@ -79,18 +80,41 @@ class MainWindow(QMainWindow):
 
         h_lay.addWidget(right, stretch=1)
 
+        # ── File Manager Panel (right side, hidden by default) ────────────────
+        self._file_mgr = FileManagerPanel()
+        self._file_mgr.file_attach_requested.connect(self._attach_from_file_manager)
+        self._file_mgr.hide()
+        h_lay.addWidget(self._file_mgr)
+
+        # Connect 📁 button on input bar to toggle file manager
+        self._input.connect_file_manager(self._toggle_file_manager)
+
         # Create the default session in the sidebar
         self._sidebar.add_session(self._session_id)
 
-        # Keyboard shortcut: Ctrl+, opens settings
+        # Keyboard shortcuts
         shortcut = QShortcut(QKeySequence("Ctrl+,"), self)
         shortcut.activated.connect(self._open_settings)
+        fm_shortcut = QShortcut(QKeySequence("Ctrl+E"), self)
+        fm_shortcut.activated.connect(self._toggle_file_manager)
 
     # ── Settings ──────────────────────────────────────────────────────────────
     def _open_settings(self):
         dlg = SettingsDialog(self)
         dlg.keys_saved.connect(self._reload_router)
         dlg.exec()
+
+    # ── File Manager ──────────────────────────────────────────────────────────
+    def _toggle_file_manager(self):
+        """Toggle the file manager panel (Ctrl+E)."""
+        if self._file_mgr.isVisible():
+            self._file_mgr.hide()
+        else:
+            self._file_mgr.show()
+
+    def _attach_from_file_manager(self, path: str):
+        """Called when user clicks 'Attach to Chat' in file manager."""
+        self._input.attach_file(path)
 
     def _reload_router(self):
         """Hot-reload the ModelRouter with new keys from .env — no restart needed."""
