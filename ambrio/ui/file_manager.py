@@ -24,13 +24,13 @@ from pathlib import Path
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QTreeView, QFileSystemModel, QLineEdit, QFrame,
+    QTreeView, QLineEdit, QFrame,
     QSizePolicy, QMenu, QInputDialog, QMessageBox,
-    QAbstractItemView, QToolButton, QSplitter, QListWidget,
+    QAbstractItemView, QSplitter, QListWidget,
     QListWidgetItem, QApplication
 )
-from PyQt6.QtCore  import Qt, pyqtSignal, QDir, QModelIndex, QMimeData, QUrl, QSize
-from PyQt6.QtGui   import QFont, QColor, QKeySequence, QShortcut, QAction, QIcon
+from PyQt6.QtCore  import Qt, pyqtSignal, QDir, QModelIndex, QUrl, QMimeData, QSize
+from PyQt6.QtGui   import QFont, QColor, QKeySequence, QShortcut, QAction, QIcon, QFileSystemModel
 
 
 # ── Quick access sidebar entries ──────────────────────────────────────────────
