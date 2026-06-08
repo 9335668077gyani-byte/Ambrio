@@ -176,15 +176,31 @@ class MainWindow(QMainWindow):
                         content = _read_xlsx(p)
                     elif ext == '.csv':
                         content = p.read_text(encoding='utf-8', errors='replace')
-                    elif ext in ('.png','.jpg','.jpeg','.bmp','.tiff','.webp','.gif'):
-                        content = _read_image_ocr(p)
+                    elif ext in ('.png', '.jpg', '.jpeg', '.bmp', '.tiff', '.webp', '.gif', '.ico', '.svg'):
+                        # ✅ Images: never read as text — pass path only
+                        # The model will call doc_convert("path","pdf") or similar
+                        size_kb = round(p.stat().st_size / 1024, 1)
+                        injected_blocks.append(
+                            f"[IMAGE FILE: {p.name} | path: {f} | size: {size_kb} KB]\n"
+                            f"This is an image file. To convert it, call: doc_convert(\"{f}\", \"pdf\")\n"
+                            f"To describe its contents you would need vision capability."
+                        )
+                        continue
                     else:
-                        # Any text/code file
-                        content = p.read_text(encoding='utf-8', errors='replace')
+                        # Try reading as text; if it looks binary, skip content
+                        try:
+                            content = p.read_text(encoding='utf-8', errors='strict')
+                        except (UnicodeDecodeError, ValueError):
+                            size_kb = round(p.stat().st_size / 1024, 1)
+                            injected_blocks.append(
+                                f"[BINARY FILE: {p.name} | path: {f} | size: {size_kb} KB]\n"
+                                f"This is a binary file. To convert it call: doc_convert(\"{f}\", \"pdf\")"
+                            )
+                            continue
 
                     # Truncate to 6000 chars to stay within context budget
                     truncated = len(content) > 6000
-                    snippet = content[:6000]
+                    snippet   = content[:6000]
                     trunc_note = " [truncated to 6000 chars]" if truncated else ""
                     injected_blocks.append(
                         f"[FILE: {p.name} | path: {f} | type: {ext}{trunc_note}]\n{snippet}"
@@ -193,6 +209,7 @@ class MainWindow(QMainWindow):
                     injected_blocks.append(
                         f"[FILE: {p.name} | path: {f}]\nCould not read file: {e}"
                     )
+
 
         # ── Compose final message sent to router ──────────────────────────────
         parts = []
