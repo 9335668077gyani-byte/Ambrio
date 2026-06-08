@@ -250,13 +250,13 @@ REGISTRY: dict[str, ModelDef] = {
 import os
 
 DEFAULT_ROUTING: dict[str, str] = {
-    "simple":    os.environ.get("AMBRIO_MODEL_SIMPLE",    "groq/llama-3.1-8b"),    # fast, obedient
-    "chat":      os.environ.get("AMBRIO_MODEL_CHAT",      "groq/llama-3.3-70b"),   # best free chat
-    "complex":   os.environ.get("AMBRIO_MODEL_COMPLEX",   "groq/llama-3.3-70b"),   # heavy tasks
-    "code":      os.environ.get("AMBRIO_MODEL_CODE",      "groq/deepseek-r1-70b"), # coding
-    "reasoning": os.environ.get("AMBRIO_MODEL_REASONING", "groq/deepseek-r1-70b"), # reasoning
-    "vision":    os.environ.get("AMBRIO_MODEL_VISION",    "gemini/2.5-flash"),      # vision/images
-    "fast":      os.environ.get("AMBRIO_MODEL_FAST",      "groq/llama-3.1-8b"),    # ultra fast
+    "simple":    os.environ.get("AMBRIO_MODEL_SIMPLE",    "openrouter/llama-3.3-70b"),  # fast, obedient
+    "chat":      os.environ.get("AMBRIO_MODEL_CHAT",      "openrouter/llama-3.3-70b"),  # best free chat
+    "complex":   os.environ.get("AMBRIO_MODEL_COMPLEX",   "openrouter/llama-3.3-70b"),  # heavy tasks
+    "code":      os.environ.get("AMBRIO_MODEL_CODE",      "openrouter/deepseek-v3"),    # coding
+    "reasoning": os.environ.get("AMBRIO_MODEL_REASONING", "openrouter/deepseek-v3"),    # reasoning
+    "vision":    os.environ.get("AMBRIO_MODEL_VISION",    "gemini/2.5-flash"),           # vision/images
+    "fast":      os.environ.get("AMBRIO_MODEL_FAST",      "openrouter/llama-3.1-8b"),   # ultra fast
 }
 
 # ── Fallback chain when primary model's keys are exhausted ───────────────────

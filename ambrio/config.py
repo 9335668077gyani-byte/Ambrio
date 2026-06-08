@@ -8,9 +8,13 @@ Example .env:
   GEMINI_API_KEYS=AIzaSy_key1,AIzaSy_key2
 
 Override routing defaults (optional):
-  AMBRIO_MODEL_CHAT=groq/llama-3.3-70b
-  AMBRIO_MODEL_CODE=ollama/codellama
-  AMBRIO_MODEL_REASONING=openrouter/deepseek-r1
+  AMBRIO_MODEL_SIMPLE    = os.getenv("AMBRIO_MODEL_SIMPLE",    "openrouter/llama-3.3-70b")
+  AMBRIO_MODEL_CHAT      = os.getenv("AMBRIO_MODEL_CHAT",      "openrouter/llama-3.3-70b")
+  AMBRIO_MODEL_COMPLEX   = os.getenv("AMBRIO_MODEL_COMPLEX",   "openrouter/llama-3.3-70b")
+  AMBRIO_MODEL_CODE      = os.getenv("AMBRIO_MODEL_CODE",      "openrouter/deepseek-v3")
+  AMBRIO_MODEL_REASONING = os.getenv("AMBRIO_MODEL_REASONING", "openrouter/deepseek-v3")
+  AMBRIO_MODEL_VISION    = os.getenv("AMBRIO_MODEL_VISION",    "gemini/2.5-flash")
+  AMBRIO_MODEL_FAST      = os.getenv("AMBRIO_MODEL_FAST",      "openrouter/llama-3.1-8b")
 """
 import os
 from pathlib import Path
