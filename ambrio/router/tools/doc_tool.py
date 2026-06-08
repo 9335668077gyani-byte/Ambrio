@@ -193,3 +193,79 @@ async def doc_extract_table(path: str, page: int = 1) -> dict:
 
     except Exception as e:
         return {'error': str(e), 'path': path}
+
+
+@tool(
+    name='doc_save',
+    description=(
+        'Save edited text content back to a document file. '
+        'Use this after editing a document to write it back to disk. '
+        'Supports .docx (Word), .txt, .csv, .md, .html and any text format. '
+        'For .docx files, creates a proper Word document. '
+        'Args: path (str) — original file path, content (str) — full edited text content.'
+    )
+)
+async def doc_save(path: str, content: str) -> dict:
+    """
+    Save edited content back to a document.
+    - .docx / .doc  → writes a proper Word document (each paragraph on new line)
+    - .txt / .md / .csv / .html / .py / etc. → plain text UTF-8
+    - Always saves next to the original with '_edited' suffix to avoid overwriting
+    """
+    try:
+        from pathlib import Path
+        p = Path(path).expanduser().resolve()
+        p.parent.mkdir(parents=True, exist_ok=True)
+
+        ext = p.suffix.lower()
+
+        # Save as proper Word document
+        if ext in ('.docx', '.doc'):
+            try:
+                import docx as _docx
+                from docx import Document
+                from docx.shared import Pt
+                doc = Document()
+                # Preserve paragraph structure
+                for para in content.split('\n'):
+                    if para.strip():
+                        p_obj = doc.add_paragraph(para)
+                        p_obj.style.font.size = Pt(11)
+                    else:
+                        doc.add_paragraph('')  # blank line
+
+                # Save as _edited.docx alongside original
+                out_path = p.parent / (p.stem + '_edited.docx')
+                doc.save(str(out_path))
+                return {
+                    'success':   True,
+                    'saved_to':  str(out_path),
+                    'format':    'Word Document (.docx)',
+                    'note':      f'Saved as {out_path.name} (original untouched)',
+                    'answer':    f'Done! Edited Word document saved to: {out_path}',
+                }
+            except ImportError:
+                # python-docx not available — save as txt instead
+                out_path = p.parent / (p.stem + '_edited.txt')
+                out_path.write_text(content, encoding='utf-8')
+                return {
+                    'success':  True,
+                    'saved_to': str(out_path),
+                    'format':   'Plain Text (python-docx not installed)',
+                    'answer':   f'Saved as plain text to: {out_path} (install python-docx for Word format)',
+                }
+
+        # Plain text formats
+        else:
+            out_path = p.parent / (p.stem + '_edited' + ext) if p.exists() else p
+            out_path.write_text(content, encoding='utf-8')
+            return {
+                'success':  True,
+                'saved_to': str(out_path),
+                'format':   ext or 'text',
+                'answer':   f'Done! Edited file saved to: {out_path}',
+            }
+
+    except Exception as e:
+        log.error(f'doc_save error: {e}')
+        return {'error': str(e), 'path': path, 'success': False}

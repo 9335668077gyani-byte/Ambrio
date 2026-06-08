@@ -55,6 +55,10 @@ _TOOL_PATTERNS = [
     (re.compile(r'doc_extract_table\s*\(\s*["\'](.+?)["\']\s*\)', re.IGNORECASE | re.DOTALL),
      'doc_extract_table', 'path'),
 
+    # doc_save("path", "content") — two-arg pattern, capture path only (content too large for regex)
+    (re.compile(r'doc_save\s*\(\s*["\'](.+?)["\']\s*,', re.IGNORECASE | re.DOTALL),
+     'doc_save', 'path'),
+
     # web_search("query")
     (re.compile(r'web_search\s*\(\s*["\'](.+?)["\']\s*\)', re.IGNORECASE | re.DOTALL),
      'web_search', 'query'),
