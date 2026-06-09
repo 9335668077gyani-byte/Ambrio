@@ -79,8 +79,9 @@ def _read_xlsx(path: Path) -> str:
 
 
 def _read_image_ocr(path: Path) -> str:
-    """Try PaddleOCR first, fallback to pytesseract, fallback to description."""
-    # Try PaddleOCR (from the repo)
+    """Try PaddleOCR → easyocr → pytesseract in order."""
+
+    # 1. PaddleOCR (best quality, if installed)
     try:
         from paddleocr import PaddleOCR
         ocr = PaddleOCR(use_angle_cls=True, lang='en', show_log=False)
@@ -89,20 +90,34 @@ def _read_image_ocr(path: Path) -> str:
         for line in (result[0] or []):
             if line and len(line) > 1 and line[1]:
                 lines.append(line[1][0])
-        return '\n'.join(lines) if lines else '[No text detected in image]'
+        if lines:
+            return '\n'.join(lines)
     except Exception:
         pass
 
-    # Try pytesseract
+    # 2. easyocr (pure Python, no binary, supports Hindi + English)
+    try:
+        import easyocr
+        reader = easyocr.Reader(['en', 'hi'], gpu=False, verbose=False)
+        results = reader.readtext(str(path), detail=0, paragraph=True)
+        text = '\n'.join(results)
+        if text.strip():
+            return text
+    except Exception:
+        pass
+
+    # 3. pytesseract (needs Tesseract binary installed separately)
     try:
         import pytesseract
         from PIL import Image as PILImage
         img = PILImage.open(path)
-        return pytesseract.image_to_string(img)
+        text = pytesseract.image_to_string(img, lang='eng+hin')
+        if text.strip():
+            return text
     except Exception:
         pass
 
-    return f'[Image OCR unavailable. Install PaddleOCR: pip install paddleocr, or pytesseract]'
+    return '[OCR unavailable — easyocr not installed. Run: pip install easyocr]'
 
 
 @tool(name='doc_read', description='Read any document: PDF, DOCX, XLSX, images (with OCR), or plain text files.')
