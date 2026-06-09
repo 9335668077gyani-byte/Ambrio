@@ -37,7 +37,10 @@ class ZmqBridge(QThread):
         try:
             self._loop.run_until_complete(self._io_loop())
         except Exception as e:
-            log.error(f"ZmqBridge loop error: {e}")
+            # "Event loop stopped before Future completed" is normal on app close — ignore it
+            msg = str(e)
+            if 'Event loop stopped' not in msg and 'Future' not in msg:
+                log.error(f"ZmqBridge loop error: {e}")
         finally:
             # Clean up all pending tasks before closing
             pending = asyncio.all_tasks(self._loop)

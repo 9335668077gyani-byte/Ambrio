@@ -87,6 +87,11 @@ _TOOL_PATTERNS = [
     (re.compile(r'file_show\s*\(\s*["\'](.+?)["\']\s*\)', re.IGNORECASE | re.DOTALL),
      'file_show', 'path'),
 
+    # doc_combine("path1", "path2") or doc_combine("path1", "path2", "name.pdf")
+    # captured path1 only — path2 extracted separately in _extract_text_tool_call
+    (re.compile(r'doc_combine\s*\(\s*["\'](.+?)["\']', re.IGNORECASE | re.DOTALL),
+     'doc_combine', 'path1'),
+
 ]
 
 
@@ -99,6 +104,17 @@ def _extract_text_tool_call(text: str) -> tuple[str, dict] | None:
     )
     if m:
         return 'doc_convert', {'path': m.group(1).strip(), 'to': m.group(2).strip()}
+
+    # Special case: doc_combine needs path1 + path2 (+ optional out_name)
+    m = re.search(
+        r'doc_combine\s*\(\s*["\'](.+?)["\']\s*,\s*["\'](.+?)["\']\s*(?:,\s*["\'](.+?)["\'])?\s*\)',
+        text, re.IGNORECASE
+    )
+    if m:
+        kwargs = {'path1': m.group(1).strip(), 'path2': m.group(2).strip()}
+        if m.group(3):
+            kwargs['out_name'] = m.group(3).strip()
+        return 'doc_combine', kwargs
 
     for pattern, tool_name, arg_name in _TOOL_PATTERNS:
         m = pattern.search(text)

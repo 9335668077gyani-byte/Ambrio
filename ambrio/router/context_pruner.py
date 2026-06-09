@@ -68,6 +68,7 @@ TOOLS (call on their own line, no explanation needed):
   doc_read("C:/path/file.pdf")                 — read PDF, Word, Excel, CSV
   doc_save("C:/path/file.docx","content")      — save edited text as a Word .docx file
   doc_convert("C:/path/file.docx","pdf")       — convert file format (docx→pdf, pdf→txt, xlsx→csv, csv→xlsx, txt→docx, jpg→pdf)
+  doc_combine("C:/path/front.jpg","C:/path/back.jpg","ADHAR.pdf")  — place 2 ID images on ONE A4 white page PDF (front top, back bottom)
   web_search("query")                          — search the internet
   web_read("https://url.com")                  — read a webpage
   reddit_search("topic")                       — search Reddit

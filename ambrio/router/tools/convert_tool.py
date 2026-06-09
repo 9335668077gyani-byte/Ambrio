@@ -263,3 +263,94 @@ def _ok(out: Path, method: str) -> dict:
         'file_name': out.name,
         'answer':    f'Done! Converted file saved to: {out}',
     }
+
+
+@tool(
+    name='doc_combine',
+    description=(
+        'Combine 2 images (e.g. front and back of an ID card) onto a single A4 white page PDF. '
+        'Image 1 goes on the top half, image 2 on the bottom half. '
+        'Perfect for Aadhaar, PAN card, driving licence — both sides on one A4 sheet. '
+        'Args: path1 (str) — first image path, path2 (str) — second image path, '
+        'out_name (str, optional) — output PDF filename (default: combined.pdf next to path1).'
+    )
+)
+async def doc_combine(path1: str, path2: str, out_name: str = '') -> dict:
+    """
+    Combine 2 images onto one A4 white-background PDF page.
+    Args:
+        path1:    Absolute path to image 1 (e.g. front of ID card)
+        path2:    Absolute path to image 2 (e.g. back of ID card)
+        out_name: Optional output filename (e.g. "ADHAR.pdf")
+    """
+    try:
+        from PIL import Image as PILImage
+
+        # ── helpers ──────────────────────────────────────────────────────────
+        def _load(p: str) -> 'PILImage.Image':
+            img = PILImage.open(p)
+            if img.mode in ('RGBA', 'LA', 'PA'):
+                bg = PILImage.new('RGB', img.size, (255, 255, 255))
+                bg.paste(img.convert('RGBA'), mask=img.convert('RGBA').split()[-1])
+                return bg
+            return img.convert('RGB')
+
+        img1 = _load(path1)
+        img2 = _load(path2)
+
+        # ── A4 canvas at 150 DPI ─────────────────────────────────────────────
+        DPI      = 150
+        A4_W     = int(8.27  * DPI)   # 1240 px
+        A4_H     = int(11.69 * DPI)   # 1753 px
+        MARGIN   = int(0.25  * DPI)   # 37 px  (~6 mm border)
+        GAP      = int(0.15  * DPI)   # 22 px  gap between cards
+
+        canvas = PILImage.new('RGB', (A4_W, A4_H), (255, 255, 255))
+
+        # Each image gets half the page height minus margins/gap
+        slot_w = A4_W - 2 * MARGIN
+        slot_h = (A4_H - 2 * MARGIN - GAP) // 2
+
+        def _fit(img: 'PILImage.Image', max_w: int, max_h: int) -> 'PILImage.Image':
+            """Scale image to fit inside max_w × max_h keeping aspect ratio."""
+            iw, ih = img.size
+            scale  = min(max_w / iw, max_h / ih)
+            new_w  = int(iw * scale)
+            new_h  = int(ih * scale)
+            return img.resize((new_w, new_h), PILImage.LANCZOS)
+
+        # ── Place image 1 — top slot ─────────────────────────────────────────
+        img1_fit = _fit(img1, slot_w, slot_h)
+        x1 = MARGIN + (slot_w - img1_fit.width)  // 2
+        y1 = MARGIN + (slot_h - img1_fit.height) // 2
+        canvas.paste(img1_fit, (x1, y1))
+
+        # ── Place image 2 — bottom slot ──────────────────────────────────────
+        img2_fit = _fit(img2, slot_w, slot_h)
+        x2 = MARGIN + (slot_w - img2_fit.width)  // 2
+        y2 = MARGIN + slot_h + GAP + (slot_h - img2_fit.height) // 2
+        canvas.paste(img2_fit, (x2, y2))
+
+        # ── Save ─────────────────────────────────────────────────────────────
+        p1 = Path(path1)
+        if out_name:
+            out = p1.parent / out_name
+            if not out.suffix:
+                out = out.with_suffix('.pdf')
+        else:
+            out = p1.parent / (p1.stem + '_combined.pdf')
+
+        canvas.save(str(out), format='PDF', resolution=DPI)
+
+        return {
+            'success':   True,
+            'saved_to':  str(out),
+            'file_name': out.name,
+            'answer':    f'✅ Combined both images on A4 → saved to: {out}',
+        }
+
+    except ImportError:
+        return {'error': 'Install Pillow: pip install Pillow', 'success': False}
+    except Exception as e:
+        log.error(f'doc_combine error: {e}')
+        return {'error': str(e), 'success': False}
