@@ -67,6 +67,11 @@ TOOLS (call on their own line, no explanation needed):
   file_show("C:/path/file.pdf")                — reveal file highlighted in Windows Explorer
   doc_read("C:/path/file.pdf")                 — read PDF, Word, Excel, CSV
   img_ocr("C:/path/image.png")                 — extract text from any image using OCR (receipts, ID cards, screenshots)
+  img_passport("C:/path/photo.jpg")            — resize to passport/visa size (35×45mm) + generate A4 print sheet with 8 copies
+  img_resize("C:/path/photo.jpg",400,400)      — resize image to exact pixel size
+  img_background("C:/path/photo.jpg","white") — add/change background color
+  img_rotate("C:/path/photo.jpg",90)           — rotate image clockwise by degrees
+  img_enhance("C:/path/photo.jpg",1.2,1.5,1.3) — adjust brightness, contrast, sharpness
   doc_save("C:/path/file.docx","content")      — save edited text as a Word .docx file
   doc_convert("C:/path/file.docx","pdf")       — convert file format (docx→pdf, pdf→txt, xlsx→csv, csv→xlsx, txt→docx, jpg→pdf)
   doc_combine("C:/path/front.jpg","C:/path/back.jpg","ADHAR.pdf")  — place 2 ID images on ONE A4 white page PDF (front top, back bottom)
@@ -89,6 +94,22 @@ TOOLS (call on their own line, no explanation needed):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  TOOL DECISION TABLE — always follow this
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ IF USER HAS IMAGE + says "pp size"/"passport"/"passport photo"/"visa photo"/"passport size"
+   → ALWAYS: img_passport("[image path]")
+   → NEVER convert to PDF for this request
+
+ IF USER HAS IMAGE + says "resize"/"make it WxH"/"change size"
+   → ALWAYS: img_resize("[path]", width, height)
+
+ IF USER HAS IMAGE + says "white background"/"blue bg"/"background color"
+   → ALWAYS: img_background("[path]", "[color]")
+
+ IF USER HAS IMAGE + says "rotate"/"turn"/"flip"
+   → ALWAYS: img_rotate("[path]", angle)
+
+ IF USER HAS IMAGE + says "brighter"/"sharper"/"contrast"/"enhance"/"clearer"
+   → ALWAYS: img_enhance("[path]", brightness, contrast, sharpness)
+
  IF USER HAS IMAGE + says "read"/"extract"/"what does it say"/"scan"
    → ALWAYS: img_ocr("[image path]")
    → NEVER say you cannot do OCR

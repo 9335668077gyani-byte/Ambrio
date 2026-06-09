@@ -96,6 +96,26 @@ _TOOL_PATTERNS = [
     (re.compile(r'img_ocr\s*\(\s*["\'](.+?)["\']\s*\)', re.IGNORECASE | re.DOTALL),
      'img_ocr', 'path'),
 
+    # img_passport("path") or img_passport("path", "india")
+    (re.compile(r'img_passport\s*\(\s*["\'](.+?)["\']', re.IGNORECASE | re.DOTALL),
+     'img_passport', 'path'),
+
+    # img_resize("path", width, height)
+    (re.compile(r'img_resize\s*\(\s*["\'](.+?)["\']', re.IGNORECASE | re.DOTALL),
+     'img_resize', 'path'),
+
+    # img_background("path", "white")
+    (re.compile(r'img_background\s*\(\s*["\'](.+?)["\']', re.IGNORECASE | re.DOTALL),
+     'img_background', 'path'),
+
+    # img_rotate("path", 90)
+    (re.compile(r'img_rotate\s*\(\s*["\'](.+?)["\']', re.IGNORECASE | re.DOTALL),
+     'img_rotate', 'path'),
+
+    # img_enhance("path", ...)
+    (re.compile(r'img_enhance\s*\(\s*["\'](.+?)["\']', re.IGNORECASE | re.DOTALL),
+     'img_enhance', 'path'),
+
 ]
 
 
@@ -154,6 +174,7 @@ class RouterService:
         import ambrio.router.tools.doc_tool            # noqa
         import ambrio.router.tools.convert_tool        # noqa
         import ambrio.router.tools.web_tool            # noqa
+        import ambrio.router.tools.img_tool            # noqa
 
         ctx = zmq.asyncio.Context()
         self._socket = ctx.socket(zmq.ROUTER)
