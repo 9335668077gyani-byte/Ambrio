@@ -92,6 +92,10 @@ _TOOL_PATTERNS = [
     (re.compile(r'doc_combine\s*\(\s*["\'](.+?)["\']', re.IGNORECASE | re.DOTALL),
      'doc_combine', 'path1'),
 
+    # img_ocr("path")
+    (re.compile(r'img_ocr\s*\(\s*["\'](.+?)["\']\s*\)', re.IGNORECASE | re.DOTALL),
+     'img_ocr', 'path'),
+
 ]
 
 

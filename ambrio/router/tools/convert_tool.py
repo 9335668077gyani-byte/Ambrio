@@ -196,7 +196,7 @@ async def doc_convert(path: str, to: str) -> dict:
             wb.save(str(out))
             return _ok(out, 'CSV → Excel')
 
-        # ── IMAGE → PDF ── scan-style (page = image, no white borders) ─────────
+        # ── IMAGE → PDF ── A4 white page, image centered with margins ────────
         elif src_ext in ('.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.webp', '.gif') and tgt_ext == 'pdf':
             try:
                 from PIL import Image as PILImage
@@ -213,24 +213,36 @@ async def doc_convert(path: str, to: str) -> dict:
                 elif img.mode != 'RGB':
                     img = img.convert('RGB')
 
-                DPI = 200
+                DPI      = 150
+                A4_W     = int(8.27  * DPI)   # 1240 px  portrait
+                A4_H     = int(11.69 * DPI)   # 1753 px
+                MARGIN   = int(0.3   * DPI)   # 45 px  ≈ 5 mm border
 
-                # Upscale tiny images (WhatsApp thumbnails etc.) to min 1200px
                 img_w, img_h = img.size
-                long_side = max(img_w, img_h)
-                if long_side < 1200:
-                    scale = 1200 / long_side
-                    img = img.resize(
-                        (int(img_w * scale), int(img_h * scale)),
-                        PILImage.LANCZOS
-                    )
 
-                # Page size = image size (scanner-style, zero white border)
-                img.save(str(out), format='PDF', resolution=DPI)
+                # Choose portrait or landscape A4 to best fit the image
+                if img_w > img_h:
+                    canvas_w, canvas_h = A4_H, A4_W   # landscape
+                else:
+                    canvas_w, canvas_h = A4_W, A4_H   # portrait
 
-                w, h = img.size
-                orient = 'landscape' if w > h else 'portrait'
-                return _ok(out, f'Image → PDF ({orient}, {w}×{h}px, no borders)')
+                # Scale image to fill 90 % of the usable area
+                usable_w = canvas_w - 2 * MARGIN
+                usable_h = canvas_h - 2 * MARGIN
+                scale    = min(usable_w / img_w, usable_h / img_h)
+                new_w    = int(img_w * scale)
+                new_h    = int(img_h * scale)
+                img      = img.resize((new_w, new_h), PILImage.LANCZOS)
+
+                # Paste centred on white A4 canvas
+                canvas = PILImage.new('RGB', (canvas_w, canvas_h), (255, 255, 255))
+                x_off  = (canvas_w - new_w) // 2
+                y_off  = (canvas_h - new_h) // 2
+                canvas.paste(img, (x_off, y_off))
+
+                canvas.save(str(out), format='PDF', resolution=DPI)
+                orient = 'landscape' if canvas_w > canvas_h else 'portrait'
+                return _ok(out, f'Image → A4 PDF ({orient}, centered on white page)')
 
             except ImportError:
                 return {'error': 'Install Pillow: pip install Pillow', 'success': False}

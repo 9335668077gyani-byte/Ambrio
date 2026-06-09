@@ -269,3 +269,50 @@ async def doc_save(path: str, content: str) -> dict:
     except Exception as e:
         log.error(f'doc_save error: {e}')
         return {'error': str(e), 'path': path, 'success': False}
+
+
+@tool(
+    name='img_ocr',
+    description=(
+        'Extract all text from an image file using OCR (Optical Character Recognition). '
+        'Use when the user attaches an image and asks to read, extract, or copy the text inside it. '
+        'Works on photos of documents, ID cards, receipts, screenshots, whiteboards. '
+        'Args: path (str) — absolute path to the image file.'
+    )
+)
+async def img_ocr(path: str) -> dict:
+    """
+    Extract text from an image using OCR.
+    Args:
+        path: Absolute path to the image file (jpg, png, bmp, tiff, webp, etc.)
+    """
+    try:
+        p = Path(path).expanduser().resolve()
+        if not p.exists():
+            return {'error': f'File not found: {path}', 'success': False}
+
+        text = _read_image_ocr(p)
+
+        if not text or text.startswith('['):
+            # Tesseract not installed — guide the user
+            return {
+                'success': False,
+                'error':   'OCR engine not available.',
+                'answer': (
+                    'To enable OCR text extraction, install Tesseract:\n'
+                    '1. Download: https://github.com/UB-Mannheim/tesseract/wiki\n'
+                    '2. Install it (default path: C:\\Program Files\\Tesseract-OCR\\)\n'
+                    '3. Restart Ambrio — OCR will work automatically.'
+                )
+            }
+
+        return {
+            'success':    True,
+            'text':       text,
+            'char_count': len(text),
+            'answer':     f'Extracted text from {p.name}:\n\n{text}',
+        }
+
+    except Exception as e:
+        log.error(f'img_ocr error: {e}')
+        return {'error': str(e), 'path': path, 'success': False}

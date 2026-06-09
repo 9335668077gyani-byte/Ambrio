@@ -66,6 +66,7 @@ TOOLS (call on their own line, no explanation needed):
   file_open("C:/path/file.pdf")                — open file with Windows default app (PDF→Acrobat, docx→Word, jpg→Photos, folder→Explorer)
   file_show("C:/path/file.pdf")                — reveal file highlighted in Windows Explorer
   doc_read("C:/path/file.pdf")                 — read PDF, Word, Excel, CSV
+  img_ocr("C:/path/image.png")                 — extract text from any image using OCR (receipts, ID cards, screenshots)
   doc_save("C:/path/file.docx","content")      — save edited text as a Word .docx file
   doc_convert("C:/path/file.docx","pdf")       — convert file format (docx→pdf, pdf→txt, xlsx→csv, csv→xlsx, txt→docx, jpg→pdf)
   doc_combine("C:/path/front.jpg","C:/path/back.jpg","ADHAR.pdf")  — place 2 ID images on ONE A4 white page PDF (front top, back bottom)
