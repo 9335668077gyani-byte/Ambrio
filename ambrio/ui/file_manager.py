@@ -33,7 +33,16 @@ from PyQt6.QtCore  import Qt, pyqtSignal, QDir, QModelIndex, QUrl, QMimeData, QS
 from PyQt6.QtGui   import QFont, QColor, QKeySequence, QShortcut, QAction, QIcon, QFileSystemModel
 
 
+# ── Ambrio output folder (all converted/saved files go here) ─────────────────
+OUTPUT_DIR = Path.home() / 'Documents' / 'Ambrio Output'
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)   # create on import
+
 # ── Quick access sidebar entries ──────────────────────────────────────────────
+# Pinned entries (shown with accent colour at top)
+_PINNED = [
+    ('⚡  Ambrio Output', OUTPUT_DIR),
+]
+
 _QUICK = [
     ('🖥  Desktop',    Path.home() / 'Desktop'),
     ('⬇  Downloads',  Path.home() / 'Downloads'),
@@ -85,6 +94,7 @@ QListWidget {
 QListWidget::item { padding: 6px 10px; }
 QListWidget::item:hover    { background: #141828; color: #e2e8f0; }
 QListWidget::item:selected { background: #1e2540; color: #a5b4fc; }
+QListWidget::item[pinned="true"] { color: #a5b4fc; font-weight: 700; background: #13142a; }
 
 /* Address bar */
 QLineEdit {
@@ -168,7 +178,7 @@ class FileManagerPanel(QWidget):
         self._clipboard_op: str = ''          # 'copy' or 'cut'
 
         self._build_ui()
-        self._navigate(Path.home() / 'Desktop')
+        self._navigate(OUTPUT_DIR)   # open to Output folder on launch
 
     # ── UI construction ───────────────────────────────────────────────────────
     def _build_ui(self):
@@ -239,12 +249,48 @@ class FileManagerPanel(QWidget):
         # Quick-access sidebar
         self._quick = QListWidget()
         self._quick.setFixedWidth(148)
+
+        # ── Pinned section header ─────────────────────────────────────────
+        pin_hdr = QListWidgetItem(" PINNED")
+        pin_hdr.setFlags(Qt.ItemFlag.NoItemFlags)   # not clickable
+        pin_hdr.setForeground(QColor('#4f46e5'))
+        font = QFont('Segoe UI', 8)
+        font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1.5)
+        pin_hdr.setFont(font)
+        self._quick.addItem(pin_hdr)
+
+        for label, folder in _PINNED:
+            item = QListWidgetItem(label)
+            item.setData(Qt.ItemDataRole.UserRole, str(folder))
+            item.setForeground(QColor('#818cf8'))
+            f2 = QFont('Segoe UI', 11)
+            f2.setBold(True)
+            item.setFont(f2)
+            item.setBackground(QColor('#0f1030'))
+            self._quick.addItem(item)
+
+        # ── Separator ─────────────────────────────────────────────────────
+        sep = QListWidgetItem("─" * 14)
+        sep.setFlags(Qt.ItemFlag.NoItemFlags)
+        sep.setForeground(QColor('#1e2236'))
+        sep.setFont(QFont('Segoe UI', 7))
+        self._quick.addItem(sep)
+
+        # ── Regular folders ───────────────────────────────────────────────
+        places_hdr = QListWidgetItem(" PLACES")
+        places_hdr.setFlags(Qt.ItemFlag.NoItemFlags)
+        places_hdr.setForeground(QColor('#4f46e5'))
+        places_hdr.setFont(font)
+        self._quick.addItem(places_hdr)
+
         for label, folder in _QUICK:
             item = QListWidgetItem(label)
             item.setData(Qt.ItemDataRole.UserRole, str(folder))
             self._quick.addItem(item)
+
         self._quick.itemClicked.connect(
             lambda i: self._navigate(Path(i.data(Qt.ItemDataRole.UserRole)))
+                      if i.data(Qt.ItemDataRole.UserRole) else None
         )
         splitter.addWidget(self._quick)
 

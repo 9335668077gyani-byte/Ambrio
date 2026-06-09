@@ -40,9 +40,16 @@ _SUPPORTED = {
 }
 
 
+def _output_dir() -> Path:
+    """Always returns ~/Documents/Ambrio Output/ — creates it if missing."""
+    d = Path.home() / 'Documents' / 'Ambrio Output'
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
 def _out_path(src: Path, target_ext: str) -> Path:
-    """Build output path alongside source with new extension."""
-    return src.parent / (src.stem + '.' + target_ext.lstrip('.'))
+    """Build output path in the Ambrio Output folder (not next to source)."""
+    return _output_dir() / (src.stem + '.' + target_ext.lstrip('.'))
 
 
 @tool(
@@ -346,11 +353,11 @@ async def doc_combine(path1: str, path2: str, out_name: str = '') -> dict:
         # ── Save ─────────────────────────────────────────────────────────────
         p1 = Path(path1)
         if out_name:
-            out = p1.parent / out_name
+            out = _output_dir() / out_name
             if not out.suffix:
                 out = out.with_suffix('.pdf')
         else:
-            out = p1.parent / (p1.stem + '_combined.pdf')
+            out = _output_dir() / (p1.stem + '_combined.pdf')
 
         canvas.save(str(out), format='PDF', resolution=DPI)
 
