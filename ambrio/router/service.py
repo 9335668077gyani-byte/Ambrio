@@ -116,6 +116,22 @@ _TOOL_PATTERNS = [
     (re.compile(r'img_enhance\s*\(\s*["\'](.+?)["\']', re.IGNORECASE | re.DOTALL),
      'img_enhance', 'path'),
 
+    # img_remove_bg("path")
+    (re.compile(r'img_remove_bg\s*\(\s*["\'](.+?)["\']', re.IGNORECASE | re.DOTALL),
+     'img_remove_bg', 'path'),
+
+    # img_upscale("path") or img_upscale("path", 4)
+    (re.compile(r'img_upscale\s*\(\s*["\'](.+?)["\']', re.IGNORECASE | re.DOTALL),
+     'img_upscale', 'path'),
+
+    # img_scan_doc("path")
+    (re.compile(r'img_scan_doc\s*\(\s*["\'](.+?)["\']', re.IGNORECASE | re.DOTALL),
+     'img_scan_doc', 'path'),
+
+    # img_color_grade("path", "vivid")
+    (re.compile(r'img_color_grade\s*\(\s*["\'](.+?)["\']', re.IGNORECASE | re.DOTALL),
+     'img_color_grade', 'path'),
+
 ]
 
 

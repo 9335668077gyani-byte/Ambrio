@@ -67,10 +67,14 @@ TOOLS (call on their own line, no explanation needed):
   file_show("C:/path/file.pdf")                — reveal file highlighted in Windows Explorer
   doc_read("C:/path/file.pdf")                 — read PDF, Word, Excel, CSV
   img_ocr("C:/path/image.png")                 — extract text from any image using OCR (receipts, ID cards, screenshots)
-  img_passport("C:/path/photo.jpg")            — resize to passport/visa size (35×45mm) + generate A4 print sheet with 8 copies
-  img_resize("C:/path/photo.jpg",400,400)      — resize image to exact pixel size
+  img_remove_bg("C:/path/photo.jpg")           — AI background removal (rembg U2Net) — outputs transparent PNG
+  img_passport("C:/path/photo.jpg")            — face-aware passport/visa size (35×45mm) + A4 print sheet with 8 copies
+  img_upscale("C:/path/photo.jpg",2)           — AI super-resolution upscaling 2x or 4x
+  img_scan_doc("C:/path/photo.jpg")            — document scanner: perspective fix + binarize
+  img_color_grade("C:/path/photo.jpg","vivid") — color grading: vivid/cool/warm/bw/vintage/fade/cinematic/portrait
+  img_resize("C:/path/photo.jpg",400,400)      — resize to exact pixel size
   img_background("C:/path/photo.jpg","white") — add/change background color
-  img_rotate("C:/path/photo.jpg",90)           — rotate image clockwise by degrees
+  img_rotate("C:/path/photo.jpg",90)           — rotate clockwise by degrees
   img_enhance("C:/path/photo.jpg",1.2,1.5,1.3) — adjust brightness, contrast, sharpness
   doc_save("C:/path/file.docx","content")      — save edited text as a Word .docx file
   doc_convert("C:/path/file.docx","pdf")       — convert file format (docx→pdf, pdf→txt, xlsx→csv, csv→xlsx, txt→docx, jpg→pdf)
@@ -98,6 +102,18 @@ TOOLS (call on their own line, no explanation needed):
    → ALWAYS: img_passport("[image path]")
    → NEVER convert to PDF for this request
 
+ IF USER HAS IMAGE + says "remove background"/"remove bg"/"cut out"/"transparent"/"no bg"
+   → ALWAYS: img_remove_bg("[path]")
+
+ IF USER HAS IMAGE + says "upscale"/"higher resolution"/"super resolution"/"make better quality"
+   → ALWAYS: img_upscale("[path]", 2)
+
+ IF USER HAS IMAGE + says "scan"/"straighten"/"fix angle"/"document scan"
+   → ALWAYS: img_scan_doc("[path]")
+
+ IF USER HAS IMAGE + says "vivid"/"black and white"/"bw"/"warm"/"cool"/"vintage"/"cinematic"/"portrait mode"
+   → ALWAYS: img_color_grade("[path]", "[preset]")
+
  IF USER HAS IMAGE + says "resize"/"make it WxH"/"change size"
    → ALWAYS: img_resize("[path]", width, height)
 
@@ -110,7 +126,7 @@ TOOLS (call on their own line, no explanation needed):
  IF USER HAS IMAGE + says "brighter"/"sharper"/"contrast"/"enhance"/"clearer"
    → ALWAYS: img_enhance("[path]", brightness, contrast, sharpness)
 
- IF USER HAS IMAGE + says "read"/"extract"/"what does it say"/"scan"
+ IF USER HAS IMAGE + says "read"/"extract"/"what does it say"/"scan text"
    → ALWAYS: img_ocr("[image path]")
    → NEVER say you cannot do OCR
 
