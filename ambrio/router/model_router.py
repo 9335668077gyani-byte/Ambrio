@@ -22,6 +22,19 @@ _COMPLEX_KW = [
     "multi-step", "all the", "step by step", "in depth",
 ]
 
+# Task-type keyword maps — checked BEFORE complexity
+_TASK_KW = {
+    "ocr":    ["extract text", "read this", "read the", "what does it say",
+               "what is written", "copy text", "ocr", "read image",
+               "text from image", "get text", "scan text"],
+    "image":  ["convert to pdf", "make pdf", "image to pdf", "combine",
+               "doc_combine", "to pdf"],
+    "doc":    ["edit this", "edit the doc", "modify", "rewrite", "translate",
+               "format this", "save as", "make it docx", "make word"],
+    "vision": ["describe", "what is in", "what's in this image", "look at",
+               "see this", "identify"],
+}
+
 
 class KeyPool:
     """
@@ -103,8 +116,19 @@ class ModelRouter:
 
     # ── Complexity detection ──────────────────────────────────────────────────
 
-    def _detect_complexity(self, text: str) -> str:
+    def _detect_complexity(self, text: str, has_image: bool = False) -> str:
         t = text.lower()
+
+        # ── Task-specific detection (highest priority) ────────────────────────
+        for task, keywords in _TASK_KW.items():
+            if any(kw in t for kw in keywords):
+                return task
+
+        # If image attached with no clear intent → default to ocr
+        if has_image and len(t.strip()) < 30:
+            return "ocr"
+
+        # ── Complexity detection ──────────────────────────────────────────────
         if any(kw in t for kw in ["```", "def ", "class ", "import ", "SELECT", "CREATE"]):
             return "code"
         if any(kw in t for kw in ["why", "reason", "logic", "prove", "solve", "calculate"]):
@@ -113,13 +137,16 @@ class ModelRouter:
             return "complex"
         return "simple"
 
-    def _select_model_alias(self, text: str, task_type: str | None = None) -> str:
+    def _select_model_alias(self, text: str, task_type: str | None = None,
+                             has_image: bool = False) -> str:
         """
         Returns the best available model alias for this request.
         Falls through FALLBACK_CHAIN if the preferred provider has no keys.
         """
         if task_type is None:
-            task_type = self._detect_complexity(text)
+            task_type = self._detect_complexity(text, has_image=has_image)
+
+        log.info(f"ModelRouter task_type={task_type} has_image={has_image}")
 
         # Get preferred alias from routing table
         preferred = DEFAULT_ROUTING.get(task_type, DEFAULT_ROUTING["chat"])
@@ -157,10 +184,12 @@ class ModelRouter:
           {"message": {"content": "token"}, "done": False}
           {"done": True}
         """
-        user_text = next(
+        user_text  = next(
             (m["content"] for m in reversed(messages) if m["role"] == "user"), ""
         )
-        alias = self._select_model_alias(user_text, task_type)
+        # Detect if any [IMAGE FILE: ...] block is in the user message
+        has_image  = '[IMAGE FILE:' in user_text or '[BINARY FILE:' in user_text
+        alias = self._select_model_alias(user_text, task_type, has_image=has_image)
         model = get_model(alias)
 
         log.info(f"ModelRouter → {alias} ({model.model_id if model else '?'})")

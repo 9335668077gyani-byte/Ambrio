@@ -255,8 +255,14 @@ DEFAULT_ROUTING: dict[str, str] = {
     "complex":   os.environ.get("AMBRIO_MODEL_COMPLEX",   "openrouter/llama-3.3-70b"),  # heavy tasks
     "code":      os.environ.get("AMBRIO_MODEL_CODE",      "openrouter/deepseek-v3"),    # coding
     "reasoning": os.environ.get("AMBRIO_MODEL_REASONING", "openrouter/deepseek-v3"),    # reasoning
-    "vision":    os.environ.get("AMBRIO_MODEL_VISION",    "gemini/2.5-flash"),           # vision/images
+    "vision":    os.environ.get("AMBRIO_MODEL_VISION",    "gemini/2.5-flash"),           # vision/images — can actually see
     "fast":      os.environ.get("AMBRIO_MODEL_FAST",      "openrouter/llama-3.1-8b"),   # ultra fast
+    # ── Task-specific routes ──────────────────────────────────────────────────
+    # OCR/image/doc: the REAL work is done by Python tools (easyocr, Pillow, docx).
+    # The LLM just needs to call the right tool — use the most obedient fast model.
+    "ocr":       os.environ.get("AMBRIO_MODEL_OCR",       "openrouter/llama-3.3-70b"),  # calls img_ocr()
+    "image":     os.environ.get("AMBRIO_MODEL_IMAGE",     "openrouter/llama-3.3-70b"),  # calls doc_convert/combine
+    "doc":       os.environ.get("AMBRIO_MODEL_DOC",       "openrouter/llama-3.3-70b"),  # calls doc_read/save
 }
 
 # ── Fallback chain when primary model's keys are exhausted ───────────────────
