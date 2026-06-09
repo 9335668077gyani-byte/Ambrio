@@ -78,46 +78,96 @@ def _read_xlsx(path: Path) -> str:
     return '\n'.join(parts)
 
 
-def _read_image_ocr(path: Path) -> str:
-    """Try PaddleOCR → easyocr → pytesseract in order."""
+def _preprocess_for_ocr(path: Path):
+    """
+    Prepare image for OCR: grayscale → upscale → sharpen → contrast boost.
+    Returns a PIL Image ready for OCR engines.
+    """
+    from PIL import Image as PILImage, ImageFilter, ImageEnhance, ImageOps
+    img = PILImage.open(path).convert('RGB')
 
-    # 1. PaddleOCR (best quality, if installed)
+    # Upscale small images — OCR needs at least ~150 DPI to read reliably
+    w, h = img.size
+    if max(w, h) < 1500:
+        scale = 1500 / max(w, h)
+        img = img.resize((int(w * scale), int(h * scale)), PILImage.LANCZOS)
+
+    # Convert to grayscale (most OCR engines prefer it)
+    img = ImageOps.grayscale(img)
+
+    # Boost contrast so text stands out against background
+    img = ImageEnhance.Contrast(img).enhance(2.0)
+
+    # Sharpen edges
+    img = img.filter(ImageFilter.SHARPEN)
+
+    return img
+
+
+def _clean_ocr_text(text: str) -> str:
+    """Remove garbage Unicode control chars and lone symbols from OCR output."""
+    import unicodedata, re
+    lines = []
+    for line in text.splitlines():
+        # Keep line if it contains at least one letter or digit
+        if re.search(r'[\w\u0900-\u097F]', line):
+            lines.append(line.strip())
+    return '\n'.join(lines)
+
+
+def _read_image_ocr(path: Path) -> str:
+    """Try PaddleOCR → easyocr → pytesseract, with preprocessing."""
+
+    img = None
+    try:
+        img = _preprocess_for_ocr(path)
+    except Exception:
+        pass  # fall through to raw path
+
+    # ── 1. PaddleOCR ─────────────────────────────────────────────────────────
     try:
         from paddleocr import PaddleOCR
         ocr = PaddleOCR(use_angle_cls=True, lang='en', show_log=False)
-        result = ocr.ocr(str(path), cls=True)
-        lines = []
-        for line in (result[0] or []):
-            if line and len(line) > 1 and line[1]:
-                lines.append(line[1][0])
+        src = str(path) if img is None else img
+        result = ocr.ocr(src, cls=True)
+        lines = [line[1][0] for line in (result[0] or [])
+                 if line and len(line) > 1 and line[1]]
         if lines:
-            return '\n'.join(lines)
+            return _clean_ocr_text('\n'.join(lines))
     except Exception:
         pass
 
-    # 2. easyocr (pure Python, no binary, supports Hindi + English)
+    # ── 2. easyocr ───────────────────────────────────────────────────────────
     try:
-        import easyocr
-        reader = easyocr.Reader(['en', 'hi'], gpu=False, verbose=False)
-        results = reader.readtext(str(path), detail=0, paragraph=True)
+        import easyocr, numpy as np
+        # English-only first (cleaner for ID cards)
+        reader = easyocr.Reader(['en'], gpu=False, verbose=False)
+        src = np.array(img) if img is not None else str(path)
+        results = reader.readtext(src, detail=0, paragraph=True)
         text = '\n'.join(results)
-        if text.strip():
-            return text
+        if len(text.strip()) > 20:
+            return _clean_ocr_text(text)
+
+        # Try adding Hindi if English gave very little
+        reader2 = easyocr.Reader(['en', 'hi'], gpu=False, verbose=False)
+        results2 = reader2.readtext(src, detail=0, paragraph=True)
+        text2 = '\n'.join(results2)
+        return _clean_ocr_text(text2 or text)
     except Exception:
         pass
 
-    # 3. pytesseract (needs Tesseract binary installed separately)
+    # ── 3. pytesseract ───────────────────────────────────────────────────────
     try:
         import pytesseract
         from PIL import Image as PILImage
-        img = PILImage.open(path)
-        text = pytesseract.image_to_string(img, lang='eng+hin')
+        src = img if img is not None else PILImage.open(path).convert('L')
+        text = pytesseract.image_to_string(src, lang='eng')
         if text.strip():
-            return text
+            return _clean_ocr_text(text)
     except Exception:
         pass
 
-    return '[OCR unavailable — easyocr not installed. Run: pip install easyocr]'
+    return '[OCR could not extract text — image may be too blurry or low resolution]'
 
 
 @tool(name='doc_read', description='Read any document: PDF, DOCX, XLSX, images (with OCR), or plain text files.')
