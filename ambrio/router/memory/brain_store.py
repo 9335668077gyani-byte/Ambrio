@@ -126,6 +126,17 @@ class BrainStore:
                 source="summarizer"
             )
 
+    # ── Lesson ingestion ──────────────────────────────────────────────────────
+    async def save_lesson(self, lesson: str) -> None:
+        """
+        Persist a single durable lesson string into the brain's fact namespace.
+        Called by PostTurnWorker after each turn.
+        Key is auto-generated as fact.lesson.<first-8-chars-of-lesson-hash>.
+        """
+        import hashlib
+        key = f"fact.lesson.{hashlib.sha1(lesson.encode()).hexdigest()[:8]}"
+        await self.set(key, lesson, namespace="fact", confidence=0.9, source="post_turn")
+
     # ── System prompt block ───────────────────────────────────────────────────
     async def build_memory_block(self) -> str:
         """

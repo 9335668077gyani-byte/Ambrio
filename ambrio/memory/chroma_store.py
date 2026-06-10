@@ -53,7 +53,7 @@ class ChromaStore:
 
     async def init(self) -> None:
         """Initialize ChromaDB client + sentence-transformers model (async-safe)."""
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, self._sync_init)
         log.info(f"ChromaStore initialized — mode={self._mode}"
                  + (f" host={_CHROMA_HOST}:{_CHROMA_PORT}" if self._mode == "http" else
@@ -103,7 +103,7 @@ class ChromaStore:
     async def insert(self, session_id: str, role: str,
                      content: str, message_id: str) -> None:
         """Upsert a single message into the vector store."""
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         await loop.run_in_executor(
             None, self._sync_upsert, session_id, role, content, message_id)
 
@@ -125,7 +125,7 @@ class ChromaStore:
         Returns list of {"content": str, "role": str, "score": float}
         Score = cosine similarity (0.0–1.0). Higher = more relevant.
         """
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(
             None, self._sync_search, session_id, query, limit)
 
@@ -151,7 +151,7 @@ class ChromaStore:
 
     async def delete_session(self, session_id: str) -> int:
         """Delete all vectors for a session. Returns count deleted."""
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self._sync_delete, session_id)
 
     def _sync_delete(self, session_id: str) -> int:

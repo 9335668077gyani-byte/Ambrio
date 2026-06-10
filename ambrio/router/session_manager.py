@@ -1,5 +1,5 @@
 # ambrio/router/session_manager.py
-import uuid, logging
+import asyncio, uuid, logging
 from .memory.db            import Database
 from .memory.fts5_store    import FTS5Store
 from .memory.brain_store   import BrainStore
@@ -45,6 +45,8 @@ class SessionManager:
         self._loop:     LearningLoop | None = None
         self._ollama:   OllamaClient = OllamaClient()
         self._model_router = None   # set after init via set_model_router()
+        self._chroma       = None
+        self._post_turn_worker = None
 
     async def init(self, db_path: str = "ambrio.db") -> None:
         self._db = Database(db_path)
@@ -62,6 +64,13 @@ class SessionManager:
                 "INSERT OR IGNORE INTO sessions(id,title) VALUES('__global__','Global')"
             )
             await c.commit()
+
+        from ambrio.memory.chroma_store     import ChromaStore
+        from ambrio.memory.post_turn_worker import PostTurnWorker
+        self._chroma = ChromaStore(persist_dir="./ambrio_chroma")
+        await self._chroma.init()
+        self._post_turn_worker = PostTurnWorker(brain=self._brain, chroma=self._chroma)
+        log.info("ChromaStore + PostTurnWorker initialized")
 
         log.info(f"SessionManager initialized — DB: {db_path}")
 
@@ -87,13 +96,21 @@ class SessionManager:
             session.ollama = router
         log.info("ModelRouter injected into SessionManager")
 
-    async def post_turn_tick(self, session_id: str) -> None:
+    async def post_turn_tick(self, session_id: str,
+                              user_input: str = "",
+                              assistant_output: str = "") -> None:
         """
         Call after every completed turn. Fires the learning loop
-        background check (non-blocking).
+        background check (non-blocking) and dispatches PostTurnWorker
+        as a fire-and-forget task.
         """
         if self._loop:
             await self._loop.tick(session_id)
+        if user_input and hasattr(self, '_post_turn_worker') and self._post_turn_worker:
+            asyncio.create_task(
+                self._post_turn_worker.process_turn(
+                    session_id, user_input, assistant_output)
+            )
 
     @property
     def brain(self) -> BrainStore | None:
