@@ -7,162 +7,6 @@ from ambrio.router.memory.token_compressor import compress_text
 
 log = logging.getLogger(__name__)
 
-# ── DEPRECATED: Text-based tool call extractor ────────────────────────────────
-# TODO(task-1.7): Remove this entire block once service.py is migrated to
-# route through the LangGraph graph (ambrio/agents/graph.py).
-# Tool extraction is now handled by the Planner → Executor nodes in the graph.
-#
-# Original purpose: Small models (llama3.2:1b) can't emit structured JSON tool
-# calls. They write tool calls as plain text instead, e.g.:
-#   sparepartspro_query("what parts are low?")
-#   sparepartspro_sql("SELECT * FROM parts")
-#   memory_search("invoice", "session-id")
-# See: ambrio/agents/graph.py for the LangGraph replacement.
-
-_TOOL_PATTERNS = [
-    # sparepartspro_query("question")
-    (re.compile(r'sparepartspro_query\s*\(\s*["\'](.+?)["\']\s*\)', re.IGNORECASE | re.DOTALL),
-     "sparepartspro_query", "question"),
-
-    # sparepartspro_sql("SELECT ...")
-    (re.compile(r'sparepartspro_sql\s*\(\s*["\'](.+?)["\']\s*\)', re.IGNORECASE | re.DOTALL),
-     "sparepartspro_sql", "sql"),
-
-    # memory_search("query", "session_id")  — session_id optional
-    (re.compile(r'memory_search\s*\(\s*["\'](.+?)["\']\s*(?:,\s*["\'].*?["\']\s*)?\)',
-                re.IGNORECASE | re.DOTALL),
-     "memory_search", "query"),
-
-    # file_read("path")
-    (re.compile(r'file_read\s*\(\s*["\'](.+?)["\']\s*\)', re.IGNORECASE | re.DOTALL),
-     'file_read', 'path'),
-
-    # file_write("path", ...) — capture path only
-    (re.compile(r'file_write\s*\(\s*["\'](.+?)["\']', re.IGNORECASE | re.DOTALL),
-     'file_write', 'path'),
-
-    # file_list("directory")
-    (re.compile(r'file_list\s*\(\s*["\'](.+?)["\']\s*\)', re.IGNORECASE | re.DOTALL),
-     'file_list', 'directory'),
-
-    # file_search("pattern")
-    (re.compile(r'file_search\s*\(\s*["\'](.+?)["\']\s*\)', re.IGNORECASE | re.DOTALL),
-     'file_search', 'pattern'),
-
-    # doc_read("path")
-    (re.compile(r'doc_read\s*\(\s*["\'](.+?)["\']\s*\)', re.IGNORECASE | re.DOTALL),
-     'doc_read', 'path'),
-
-    # doc_extract_table("path")
-    (re.compile(r'doc_extract_table\s*\(\s*["\'](.+?)["\']\s*\)', re.IGNORECASE | re.DOTALL),
-     'doc_extract_table', 'path'),
-
-    # doc_save("path", "content") — two-arg pattern, capture path only (content too large for regex)
-    (re.compile(r'doc_save\s*\(\s*["\'](.+?)["\']\s*,', re.IGNORECASE | re.DOTALL),
-     'doc_save', 'path'),
-
-    # doc_convert("path", "to_format") — capture path, format extracted separately below
-    (re.compile(r'doc_convert\s*\(\s*["\'](.+?)["\']\s*,\s*["\']([\w]+)["\']\s*\)', re.IGNORECASE),
-     'doc_convert', 'path'),
-
-    # web_search("query")
-    (re.compile(r'web_search\s*\(\s*["\'](.+?)["\']\s*\)', re.IGNORECASE | re.DOTALL),
-     'web_search', 'query'),
-
-    # web_read("url")
-    (re.compile(r'web_read\s*\(\s*["\'](.+?)["\']\s*\)', re.IGNORECASE | re.DOTALL),
-     'web_read', 'url'),
-
-    # reddit_search("query")
-    (re.compile(r'reddit_search\s*\(\s*["\'](.+?)["\']\s*\)', re.IGNORECASE | re.DOTALL),
-     'reddit_search', 'query'),
-
-    # github_search("query")
-    (re.compile(r'github_search\s*\(\s*["\'](.+?)["\']\s*\)', re.IGNORECASE | re.DOTALL),
-     'github_search', 'query'),
-
-    # file_open("path")
-    (re.compile(r'file_open\s*\(\s*["\'](.+?)["\']\s*\)', re.IGNORECASE | re.DOTALL),
-     'file_open', 'path'),
-
-    # file_show("path")
-    (re.compile(r'file_show\s*\(\s*["\'](.+?)["\']\s*\)', re.IGNORECASE | re.DOTALL),
-     'file_show', 'path'),
-
-    # doc_combine("path1", "path2") or doc_combine("path1", "path2", "name.pdf")
-    # captured path1 only — path2 extracted separately in _extract_text_tool_call
-    (re.compile(r'doc_combine\s*\(\s*["\'](.+?)["\']', re.IGNORECASE | re.DOTALL),
-     'doc_combine', 'path1'),
-
-    # img_ocr("path")
-    (re.compile(r'img_ocr\s*\(\s*["\'](.+?)["\']\s*\)', re.IGNORECASE | re.DOTALL),
-     'img_ocr', 'path'),
-
-    # img_passport("path") or img_passport("path", "india")
-    (re.compile(r'img_passport\s*\(\s*["\'](.+?)["\']', re.IGNORECASE | re.DOTALL),
-     'img_passport', 'path'),
-
-    # img_resize("path", width, height)
-    (re.compile(r'img_resize\s*\(\s*["\'](.+?)["\']', re.IGNORECASE | re.DOTALL),
-     'img_resize', 'path'),
-
-    # img_background("path", "white")
-    (re.compile(r'img_background\s*\(\s*["\'](.+?)["\']', re.IGNORECASE | re.DOTALL),
-     'img_background', 'path'),
-
-    # img_rotate("path", 90)
-    (re.compile(r'img_rotate\s*\(\s*["\'](.+?)["\']', re.IGNORECASE | re.DOTALL),
-     'img_rotate', 'path'),
-
-    # img_enhance("path", ...)
-    (re.compile(r'img_enhance\s*\(\s*["\'](.+?)["\']', re.IGNORECASE | re.DOTALL),
-     'img_enhance', 'path'),
-
-    # img_remove_bg("path")
-    (re.compile(r'img_remove_bg\s*\(\s*["\'](.+?)["\']', re.IGNORECASE | re.DOTALL),
-     'img_remove_bg', 'path'),
-
-    # img_upscale("path") or img_upscale("path", 4)
-    (re.compile(r'img_upscale\s*\(\s*["\'](.+?)["\']', re.IGNORECASE | re.DOTALL),
-     'img_upscale', 'path'),
-
-    # img_scan_doc("path")
-    (re.compile(r'img_scan_doc\s*\(\s*["\'](.+?)["\']', re.IGNORECASE | re.DOTALL),
-     'img_scan_doc', 'path'),
-
-    # img_color_grade("path", "vivid")
-    (re.compile(r'img_color_grade\s*\(\s*["\'](.+?)["\']', re.IGNORECASE | re.DOTALL),
-     'img_color_grade', 'path'),
-
-]
-
-
-def _extract_text_tool_call(text: str) -> tuple[str, dict] | None:
-    """Return (tool_name, kwargs) if a text-format tool call is found."""
-    # Special case: doc_convert needs two args (path + format)
-    m = re.search(
-        r'doc_convert\s*\(\s*["\'](.+?)["\']\s*,\s*["\']([\w]+)["\']\s*\)',
-        text, re.IGNORECASE
-    )
-    if m:
-        return 'doc_convert', {'path': m.group(1).strip(), 'to': m.group(2).strip()}
-
-    # Special case: doc_combine needs path1 + path2 (+ optional out_name)
-    m = re.search(
-        r'doc_combine\s*\(\s*["\'](.+?)["\']\s*,\s*["\'](.+?)["\']\s*(?:,\s*["\'](.+?)["\'])?\s*\)',
-        text, re.IGNORECASE
-    )
-    if m:
-        kwargs = {'path1': m.group(1).strip(), 'path2': m.group(2).strip()}
-        if m.group(3):
-            kwargs['out_name'] = m.group(3).strip()
-        return 'doc_combine', kwargs
-
-    for pattern, tool_name, arg_name in _TOOL_PATTERNS:
-        m = pattern.search(text)
-        if m:
-            return tool_name, {arg_name: m.group(1).strip()}
-    return None
 
 
 class RouterService:
@@ -222,8 +66,6 @@ class RouterService:
             match frame.type:
                 case MsgType.CHAT_REQUEST:
                     await self._stream_chat(identity, frame)
-                case MsgType.TOOL_RESULT:
-                    await self._resume_after_tool(identity, frame)
         except Exception as e:
             log.exception(f"Router error for session {frame.session_id}")
             await self._send(identity, Frame(
@@ -234,155 +76,32 @@ class RouterService:
 
     async def _stream_chat(self, identity: bytes, frame: Frame) -> None:
         import time
-        session   = await self.sessions.get_or_create(frame.session_id)
-        messages  = await session.build_context(frame.payload.get("content", ""))
-        assistant = ""
-        token_count = 0
-        t_start = time.monotonic()
+        session      = await self.sessions.get_or_create(frame.session_id)
+        user_content = frame.payload.get("content", "")
+        messages     = await session.build_context(user_content)
+        t_start      = time.monotonic()
+        full_answer  = ""
+        token_count  = 0
 
-        # Capture which model alias is chosen for this request
-        user_text = frame.payload.get("content", "")
-        model_alias = self._model_router._select_model_alias(user_text)
-        from ambrio.router.model_registry import get_model
-        model_def   = get_model(model_alias)
-        provider    = model_def.provider if model_def else "ollama"
-        model_id    = model_def.model_id  if model_def else model_alias
-
-        async for chunk in session.ollama.stream(messages, tools=self.tools.schema()):
-            if chunk.get("done"):
-                break
-            msg = chunk.get("message", {})
-
-            # ── Structured tool call (models that support it) ─────────────────
-            if msg.get("tool_calls"):
-                tool_call = msg["tool_calls"][0]
-                tool_name = tool_call.get("function", {}).get("name", "")
-                tool_args = tool_call.get("function", {}).get("arguments", {})
-                log.info(f"Structured tool call: {tool_name}({tool_args})")
-                await self._execute_tool_and_reply(identity, frame, session,
-                                                   assistant, tool_name, tool_args,
-                                                   model_alias=model_alias)
-                return
-
-            token = msg.get("content", "")
-            assistant  += token
-            token_count += len(token.split()) if token else 0
-            if token:
-                await self._send(identity, Frame(
-                    session_id=frame.session_id,
-                    type=MsgType.CHAT_TOKEN,
-                    payload={"token": token}
-                ))
-
-        # ── Text-based tool call fallback (small models like llama3.2:1b) ──
-        # TODO(task-1.7): Replace this call with run_graph() from ambrio.agents.graph
-        # once _stream_chat is fully migrated to the LangGraph pipeline.
-        # See: ambrio/agents/graph.py — Tool extraction via LangGraph graph.
-        tool_hit = _extract_text_tool_call(assistant)
-        if tool_hit:
-            tool_name, tool_args = tool_hit
-            log.info(f"Text tool call detected: {tool_name}({tool_args})")
-            await self._execute_tool_and_reply(identity, frame, session,
-                                               assistant, tool_name, tool_args,
-                                               model_alias=model_alias)
-            return
-
-        # ── Normal text response ────────────────────────────────────
-        elapsed = round(time.monotonic() - t_start, 1)
-        await session.persist_turn(frame.payload.get("content", ""), assistant)
-        await self.sessions.post_turn_tick(frame.session_id)
-        await self._send(identity, Frame(
-            session_id=frame.session_id,
-            type=MsgType.CHAT_DONE,
-            payload={
-                "model":    model_alias,
-                "provider": provider,
-                "model_id": model_id,
-                "tokens":   token_count,
-                "elapsed":  elapsed,
-            }
-        ))
-
-    async def _execute_tool_and_reply(
-        self,
-        identity:  bytes,
-        frame:     Frame,
-        session,
-        assistant: str,
-        tool_name: str,
-        tool_args: dict,
-        model_alias: str = "ollama/llama3.2-1b",
-    ) -> None:
-        import time
-        """Execute a tool call and stream the result back as a natural answer."""
-        t_start = time.monotonic()
-        from ambrio.router.model_registry import get_model
-        model_def = get_model(model_alias)
-        provider  = model_def.provider if model_def else "ollama"
-        model_id  = model_def.model_id  if model_def else model_alias
-
-        # Execute the tool
-        try:
-            result = await self.tools.dispatch(tool_name, tool_args)
-        except Exception as e:
-            result = {"error": str(e)}
-
-        log.info(f"Tool result: {str(result)[:200]}")
-
-        # For ERP queries, the answer is already in result["answer"]
-        if isinstance(result, dict) and "answer" in result and not result.get("error"):
-            final_answer = result["answer"]
-        elif isinstance(result, dict) and result.get("error"):
-            final_answer = f"I ran into an issue: {result['error']}"
-        else:
-            final_answer = json.dumps(result, default=str)[:500]
-
-        # Compress tool result to save tokens
-        final_answer = compress_text(final_answer, max_tokens=400)
-
-        # Stream the answer token by token (word-by-word for smooth UX)
-        words   = final_answer.split()
-        streamed = ""
-        for i, word in enumerate(words):
-            token = word + (" " if i < len(words) - 1 else "")
-            streamed += token
+        from ambrio.agents.runner import run_agent
+        async for token in run_agent(frame.session_id, user_content, messages):
+            token_count += 1
+            full_answer += token
             await self._send(identity, Frame(
                 session_id=frame.session_id,
                 type=MsgType.CHAT_TOKEN,
                 payload={"token": token}
             ))
-            await asyncio.sleep(0.015)
 
         elapsed = round(time.monotonic() - t_start, 1)
-        await session.persist_turn(frame.payload.get("content", ""), streamed)
-        await self.sessions.post_turn_tick(frame.session_id)
+        await session.persist_turn(user_content, full_answer)
+        await self.sessions.post_turn_tick(
+            frame.session_id, user_content, full_answer)
         await self._send(identity, Frame(
             session_id=frame.session_id,
             type=MsgType.CHAT_DONE,
-            payload={
-                "model":    model_alias,
-                "provider": provider,
-                "model_id": model_id,
-                "tokens":   len(streamed.split()),
-                "elapsed":  elapsed,
-                "tool":     tool_name,
-            }
+            payload={"model": "multi-agent", "tokens": token_count, "elapsed": elapsed}
         ))
-
-    async def _resume_after_tool(self, identity: bytes, frame: Frame) -> None:
-        result = await self.tools.dispatch(
-            frame.payload["tool_name"],
-            frame.payload.get("tool_args", {})
-        )
-        session = await self.sessions.get_or_create(frame.session_id)
-        session.inject_tool_result(result)
-
-        resume_frame = Frame(
-            session_id=frame.session_id,
-            type=MsgType.CHAT_REQUEST,
-            payload={"content": ""}
-        )
-        await self._stream_chat(identity, resume_frame)
 
     async def _send(self, identity: bytes, frame: Frame) -> None:
         # ROUTER→DEALER: send [identity, payload] — no empty delimiter

@@ -140,3 +140,18 @@ async def test_graph_synthesizer_crash_returns_fallback():
         result = await run_graph(session_id="synth-crash", user_input="test")
 
     assert result["final_answer"] == _FALLBACK_ANSWER
+@pytest.mark.asyncio
+async def test_full_graph_simple_query():
+    from unittest.mock import AsyncMock, patch
+    from ambrio.agents.runner import run_agent
+    with patch("ambrio.agents.nodes.planner._call_planner_llm", new_callable=AsyncMock) as p, \
+         patch("ambrio.agents.nodes.synthesizer._call_synthesizer_llm", new_callable=AsyncMock) as s:
+        p.return_value = [{"description": "answer",  "tool": None, "args": None,
+                            "status": "pending", "result": None}]
+        s.return_value = "The answer is 42."
+        tokens = []
+        async for token in run_agent("test-s", "what is 6*7", [], None):
+            tokens.append(token)
+    full = "".join(tokens)
+    assert "42" in full
+
