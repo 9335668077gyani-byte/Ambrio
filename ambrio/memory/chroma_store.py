@@ -15,7 +15,7 @@ Config env vars:
   CHROMA_AUTH_TOKEN = bearer token        (optional, prod only)
   AMBRIO_CHROMA_DIR = /path/to/persist    (embedded mode only, default: ./ambrio_chroma)
 """
-import asyncio, logging, os
+import asyncio, logging, os, uuid
 log = logging.getLogger(__name__)
 
 _CHROMA_MODE      = os.environ.get("CHROMA_MODE",      "embedded")
@@ -43,6 +43,13 @@ class ChromaStore:
         self._collection = None
         self._embedder   = None
         self._mode       = "memory" if persist_dir == ":memory:" else _CHROMA_MODE
+        # Unique collection name per :memory: instance so that EphemeralClient
+        # (which is a process-level singleton) doesn't leak state between tests.
+        self._collection_name = (
+            f"ambrio_messages_{uuid.uuid4().hex}"
+            if self._mode == "memory"
+            else "ambrio_messages"
+        )
 
     async def init(self) -> None:
         """Initialize ChromaDB client + sentence-transformers model (async-safe)."""
@@ -74,7 +81,7 @@ class ChromaStore:
             client = chromadb.PersistentClient(path=self.persist_dir)
 
         self._collection = client.get_or_create_collection(
-            name="ambrio_messages",
+            name=self._collection_name,
             metadata={"hnsw:space": "cosine"}
         )
         # Cache dir for sentence-transformers model weights
