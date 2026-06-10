@@ -11,6 +11,7 @@ log = logging.getLogger(__name__)
 # Maps tool name → async callable(args: dict) -> Any
 # Populated lazily to avoid circular imports; tools register themselves.
 _TOOL_REGISTRY: dict[str, Any] = {}
+_tools_loaded: bool = False
 
 
 def register_tool(name: str):
@@ -28,9 +29,10 @@ def register_tool(name: str):
 
 async def _dispatch_tool(tool_name: str, args: dict[str, Any] | None) -> Any:
     """Look up and call a registered tool. Raises KeyError if unknown."""
-    if tool_name not in _TOOL_REGISTRY:
-        # Lazy import tools package so all @register_tool decorators fire
-        import ambrio.tools  # noqa: F401  (side-effect import)
+    global _tools_loaded
+    if tool_name not in _TOOL_REGISTRY and not _tools_loaded:
+        import ambrio.tools  # noqa: F401  (side-effect import — registers all tools)
+        _tools_loaded = True
     if tool_name not in _TOOL_REGISTRY:
         raise KeyError(f"Unknown tool: '{tool_name}'")
     return await _TOOL_REGISTRY[tool_name](args or {})
@@ -42,10 +44,13 @@ async def executor_node(state: AgentState) -> AgentState:
     """LangGraph node: execute current_subtask and record result."""
     idx = state["current_subtask"]
     subtasks = [dict(t) for t in state["subtasks"]]  # mutable copy
+    if idx >= len(subtasks):
+        log.warning("[Executor] current_subtask=%d out of range (len=%d), skipping", idx, len(subtasks))
+        return state
     task = subtasks[idx]
     tool_name = task.get("tool")
 
-    log.info("[Executor] task=%d tool=%s desc=%r", idx, tool_name, task["description"][:60])
+    log.info("[Executor] task=%d tool=%s desc=%r", idx, tool_name, task.get("description", "")[:60])
 
     tool_results = list(state["tool_results"])
 
