@@ -9,6 +9,8 @@ from ambrio.agents.state import AgentState, SubTask
 
 log = logging.getLogger(__name__)
 
+_MAX_SUBTASKS = 4
+
 _PLANNER_SYSTEM = """You are a task planner. Break the user request into ordered subtasks.
 Return ONLY valid JSON — a list of subtask objects. No prose, no explanation.
 
@@ -32,18 +34,37 @@ _FALLBACK_SUBTASK: SubTask = {
     "result": None,
 }
 
+# Singleton router — created once on first call, reused on retries
+_router: "Any | None" = None
+
+
+def _get_router() -> "Any":
+    global _router
+    if _router is None:
+        from ambrio.config import PROVIDER_KEYS
+        from ambrio.router.model_router import ModelRouter
+        _router = ModelRouter(provider_keys=PROVIDER_KEYS)
+    return _router
+
 
 def _build_fallback(user_input: str) -> list[SubTask]:
     return [{**_FALLBACK_SUBTASK, "description": user_input}]
 
 
+def _strip_fences(text: str) -> str:
+    """Remove markdown code fences LLMs add around JSON."""
+    text = re.sub(r"```(?:json)?\s*", "", text)
+    return text.replace("```", "").strip()
+
+
 def _parse_subtasks(raw: str) -> list[SubTask]:
-    """Extract JSON array from LLM output. Returns fallback list on any parse error."""
-    match = re.search(r'\[.*?\]', raw, re.DOTALL)
-    if not match:
+    """Extract JSON array from LLM output. Returns [] on any parse error."""
+    cleaned = _strip_fences(raw)
+    start = cleaned.find("[")
+    if start == -1:
         return []
     try:
-        tasks: list[dict[str, Any]] = json.loads(match.group())
+        tasks: list[dict[str, Any]] = json.loads(cleaned[start:])
         result: list[SubTask] = []
         for t in tasks:
             result.append(SubTask(
@@ -53,17 +74,14 @@ def _parse_subtasks(raw: str) -> list[SubTask]:
                 status="pending",
                 result=None,
             ))
-        return result[:4]  # hard cap at 4 subtasks
-    except (json.JSONDecodeError, TypeError, KeyError):
+        return result[:_MAX_SUBTASKS]
+    except (json.JSONDecodeError, TypeError, ValueError):
         return []
 
 
 async def _call_planner_llm(user_input: str) -> list[SubTask]:
     """Call the configured reasoning LLM and parse subtasks from response."""
-    from ambrio.config import PROVIDER_KEYS
-    from ambrio.router.model_router import ModelRouter
-
-    router = ModelRouter(provider_keys=PROVIDER_KEYS)
+    router = _get_router()
     messages = [
         {"role": "system", "content": _PLANNER_SYSTEM},
         {"role": "user",   "content": user_input},
@@ -74,6 +92,10 @@ async def _call_planner_llm(user_input: str) -> list[SubTask]:
             break
         full_text += chunk.get("message", {}).get("content", "")
 
+    if not full_text.strip():
+        log.warning("[Planner] LLM returned empty stream — using fallback")
+        return _build_fallback(user_input)
+
     subtasks = _parse_subtasks(full_text)
     if not subtasks:
         log.warning("[Planner] LLM returned unparseable output — using fallback")
@@ -83,11 +105,11 @@ async def _call_planner_llm(user_input: str) -> list[SubTask]:
 
 async def planner_node(state: AgentState) -> AgentState:
     """LangGraph node: decompose user_input into subtasks list."""
-    log.info(f"[Planner] Planning: {state['user_input'][:80]}")
+    log.info("[Planner] Planning: %s", state["user_input"][:80])
     try:
         subtasks = await _call_planner_llm(state["user_input"])
     except Exception as e:
-        log.error(f"[Planner] LLM call failed ({e}) — using fallback")
+        log.error("[Planner] LLM call failed (%s) — using fallback", e, exc_info=True)
         subtasks = _build_fallback(state["user_input"])
-    log.info(f"[Planner] → {len(subtasks)} subtask(s)")
+    log.info("[Planner] → %d subtask(s)", len(subtasks))
     return {**state, "subtasks": subtasks, "current_subtask": 0}
