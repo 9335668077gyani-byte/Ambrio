@@ -184,6 +184,7 @@ class ModelRouter:
         messages:   list[dict],
         tools:      list | None = None,
         task_type:  str | None  = None,
+        response_format: dict | None = None,
     ) -> AsyncIterator[dict]:
         """
         Stream response in Ollama-compatible chunk format:
@@ -201,16 +202,16 @@ class ModelRouter:
         log.info(f"ModelRouter → {alias} ({model.model_id if model else '?'})")
 
         try:
-            async for chunk in self._dispatch(alias, model, messages, tools):
+            async for chunk in self._dispatch(alias, model, messages, tools, response_format=response_format):
                 yield chunk
         except Exception as e:
             log.error(f"Model {alias} FAILED ({type(e).__name__}: {e}) — falling back to Ollama")
-            async for chunk in self._stream_ollama(messages, tools):
+            async for chunk in self._stream_ollama(messages, tools, response_format=response_format):
                 yield chunk
 
-    async def _dispatch(self, alias: str, model: ModelDef, messages, tools):
+    async def _dispatch(self, alias: str, model: ModelDef, messages, tools, response_format=None):
         if model.provider == "ollama":
-            async for c in self._stream_ollama(messages, tools):
+            async for c in self._stream_ollama(messages, tools, response_format=response_format):
                 yield c
         elif model.provider == "gemini":
             async for c in self._stream_gemini(model, messages):
@@ -224,10 +225,10 @@ class ModelRouter:
 
     # ── Provider adapters ─────────────────────────────────────────────────────
 
-    async def _stream_ollama(self, messages: list[dict], tools=None):
+    async def _stream_ollama(self, messages: list[dict], tools=None, response_format=None):
         """Delegate to existing OllamaClient."""
         from .ollama_client import OllamaClient
-        async for chunk in OllamaClient().stream(messages, tools=tools):
+        async for chunk in OllamaClient().stream(messages, tools=tools, response_format=response_format):
             yield chunk
 
     async def _stream_openai_compat(

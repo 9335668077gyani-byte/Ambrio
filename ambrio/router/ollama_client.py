@@ -57,18 +57,22 @@ class OllamaClient:
     async def stream(
         self,
         messages: list[dict],
-        tools: list[dict] | None = None
+        tools: list[dict] | None = None,
+        response_format: dict | None = None
     ) -> AsyncGenerator[dict, None]:
         model = await self._resolve_model()
         payload: dict = {
             "model":    model,
             "messages": messages,
             "stream":   True,
+            "options":  {"temperature": 0.1 if response_format else 0.7},
         }
         # Small / basic models don't support tool calling — skip to avoid errors
         supports_tools = not any(m in model for m in ["1b", "phi3", "gemma:"])
         if tools and supports_tools:
             payload["tools"] = tools
+        if response_format:
+            payload["format"] = response_format
 
         timeout = aiohttp.ClientTimeout(total=self.TIMEOUT_S)
         async with aiohttp.ClientSession(timeout=timeout) as session:
