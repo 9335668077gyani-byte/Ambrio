@@ -3,7 +3,9 @@
 import pytest
 from unittest.mock import AsyncMock, patch
 from ambrio.agents.state import AgentState, SubTask
-from ambrio.agents.nodes.synthesizer import synthesizer_node
+from ambrio.agents.nodes.synthesizer import (
+    synthesizer_node, _build_synthesis_prompt, _FALLBACK_ANSWER
+)
 
 
 def _state(**overrides) -> AgentState:
@@ -15,6 +17,8 @@ def _state(**overrides) -> AgentState:
     )
     return {**base, **overrides}
 
+
+# ── synthesizer_node tests ────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
 async def test_synthesizer_produces_final_answer():
@@ -45,14 +49,13 @@ async def test_synthesizer_works_with_no_tool_results():
 
 @pytest.mark.asyncio
 async def test_synthesizer_fallback_on_llm_error():
-    """If LLM fails, final_answer is a safe error string (not a crash)."""
+    """If LLM fails, final_answer equals _FALLBACK_ANSWER exactly."""
     state = _state(user_input="explain Python", tool_results=[])
     with patch("ambrio.agents.nodes.synthesizer._call_synthesizer_llm",
                new_callable=AsyncMock) as mock:
         mock.side_effect = Exception("LLM unavailable")
         result = await synthesizer_node(state)
-    assert result["final_answer"] is not None
-    assert "error" in result["final_answer"].lower() or "unable" in result["final_answer"].lower()
+    assert result["final_answer"] == _FALLBACK_ANSWER
 
 
 @pytest.mark.asyncio
@@ -73,3 +76,43 @@ async def test_synthesizer_preserves_state_fields():
     assert result["attempt_count"] == 1
     assert result["subtasks"] == subtasks
     assert result["messages"] == [{"role": "user", "content": "hi"}]
+
+
+# ── _build_synthesis_prompt unit tests ───────────────────────────────────────
+
+def test_prompt_no_tool_results_returns_bare_input():
+    """Empty tool_results → bare user_input (no preamble)."""
+    prompt = _build_synthesis_prompt("hello world", [])
+    assert prompt == "hello world"
+
+
+def test_prompt_with_successful_result():
+    tool_results = [{"tool": "web_search", "result": "Python is great", "error": None}]
+    prompt = _build_synthesis_prompt("what is Python?", tool_results)
+    assert "web_search" in prompt
+    assert "Python is great" in prompt
+    assert "User question: what is Python?" in prompt
+
+
+def test_prompt_with_none_result_shows_placeholder():
+    """result=None must NOT render as 'None' string — shows placeholder instead."""
+    tool_results = [{"tool": "web_search", "result": None, "error": None}]
+    prompt = _build_synthesis_prompt("test", tool_results)
+    assert "None" not in prompt
+    assert "(no result returned)" in prompt
+
+
+def test_prompt_with_error_shows_error_prefix():
+    tool_results = [{"tool": "web_search", "result": None, "error": "timeout"}]
+    prompt = _build_synthesis_prompt("test", tool_results)
+    assert "ERROR: timeout" in prompt
+
+
+def test_prompt_multiple_results_numbered():
+    tool_results = [
+        {"tool": "web_search", "result": "r1", "error": None},
+        {"tool": "file_read",  "result": "r2", "error": None},
+    ]
+    prompt = _build_synthesis_prompt("test", tool_results)
+    assert "1. [web_search]" in prompt
+    assert "2. [file_read]" in prompt
