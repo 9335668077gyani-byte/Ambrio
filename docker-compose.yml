@@ -1,0 +1,91 @@
+# docker-compose.yml
+# ─── BASE configuration — shared by dev and prod ─────────────────────────────
+# Usage:
+#   Dev:  docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#   Prod: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+version: "3.9"
+
+# ─── Named volumes ────────────────────────────────────────────────────────────
+volumes:
+  ambrio_db:          # SQLite database persistence
+  ambrio_chroma:      # ChromaDB vector store persistence
+  ollama_models:      # Ollama downloaded model weights
+
+# ─── Internal network (services talk to each other, not exposed by default) ───
+networks:
+  ambrio_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+# ─── Services ─────────────────────────────────────────────────────────────────
+services:
+
+  # ── ChromaDB — vector memory server ─────────────────────────────────────────
+  chromadb:
+    image: chromadb/chroma:0.5.23
+    restart: unless-stopped
+    networks:
+      - ambrio_net
+    volumes:
+      - ambrio_chroma:/chroma/chroma
+    environment:
+      IS_PERSISTENT: "TRUE"
+      CHROMA_SERVER_HOST: "0.0.0.0"
+      CHROMA_SERVER_HTTP_PORT: "8000"
+      ANONYMIZED_TELEMETRY: "FALSE"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    # Internal only — not exposed to host in prod
+    expose:
+      - "8000"
+
+  # ── Ollama — local LLM server ────────────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    networks:
+      - ambrio_net
+    volumes:
+      - ollama_models:/root/.ollama
+    environment:
+      OLLAMA_HOST: "0.0.0.0"
+      OLLAMA_KEEP_ALIVE: "24h"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    expose:
+      - "11434"
+
+  # ── Ambrio API — FastAPI WebSocket backend ────────────────────────────────────
+  ambrio-api:
+    depends_on:
+      chromadb:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    networks:
+      - ambrio_net
+    volumes:
+      - ambrio_db:/data/db
+    env_file:
+      - .env                        # API keys (GROQ, GEMINI, etc.)
+    environment:
+      AMBRIO_DB_PATH:    /data/db/ambrio.db
+      AMBRIO_CHROMA_DIR: /data/chroma
+      CHROMA_MODE:       http        # CRITICAL: use ChromaDB HTTP client in Docker
+      CHROMA_HOST:       chromadb
+      CHROMA_PORT:       "8000"
+      OLLAMA_BASE_URL:   http://ollama:11434
+    restart: unless-stopped
+    ports:
+      - "8765:8765"                  # WebSocket API — accessible from host

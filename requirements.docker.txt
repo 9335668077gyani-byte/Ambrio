@@ -1,0 +1,36 @@
+# requirements.docker.txt
+# Production Docker requirements — no PyQt6, no ZMQ
+# Used by: docker/Dockerfile, docker/Dockerfile.dev
+
+# ─── Core async framework ────────────────────────────────────────────────────
+aiosqlite>=0.20.0
+aiohttp>=3.9.0
+pydantic>=2.7.0
+
+# ─── FastAPI + WebSocket server ──────────────────────────────────────────────
+fastapi>=0.111.0
+uvicorn[standard]>=0.30.0
+websockets>=12.0
+
+# ─── Multi-agent graph ───────────────────────────────────────────────────────
+langgraph>=0.2.0
+langchain-core>=0.2.0
+
+# ─── Vector memory ───────────────────────────────────────────────────────────
+chromadb>=0.5.0
+sentence-transformers>=2.7.0
+
+# ─── Document ingestion ──────────────────────────────────────────────────────
+markitdown[all]>=0.0.1
+PyMuPDF>=1.24.0
+Pillow>=10.0.0
+python-magic-bin>=0.4.14
+
+# ─── LLM utilities ───────────────────────────────────────────────────────────
+tiktoken>=0.7.0
+msgpack>=1.0.8
+
+# ─── Testing (included so dev image runs pytest) ─────────────────────────────
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+httpx>=0.27.0         # for FastAPI TestClient

@@ -1,0 +1,38 @@
+# docker-compose.dev.yml
+# ─── DEV overrides ────────────────────────────────────────────────────────────
+# Merges with docker-compose.yml
+# Command: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+version: "3.9"
+
+services:
+
+  chromadb:
+    # Expose ChromaDB port in dev so you can inspect it from host
+    ports:
+      - "8001:8000"                   # http://localhost:8001/api/v1/collections
+    environment:
+      CHROMA_SERVER_CORS_ALLOW_ORIGINS: '["*"]'  # allow dev tools
+
+  ollama:
+    # Expose Ollama in dev for direct model pulls from host
+    ports:
+      - "11434:11434"
+
+  ambrio-api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dev
+    image: ambrio-api:dev
+    # Bind mount — code changes reflect instantly (hot reload)
+    volumes:
+      - ambrio_db:/data/db
+      - ./ambrio:/app/ambrio          # live source code
+      - ./tests:/app/tests            # run tests inside container
+    environment:
+      AMBRIO_ENV:    development
+      LOG_LEVEL:     debug
+      UVICORN_WORKERS: "1"           # single worker in dev (easier to debug)
+    ports:
+      - "8765:8765"
+      - "5678:5678"                  # debugpy remote debug port

@@ -1,0 +1,46 @@
+# docker/Dockerfile.dev
+# Dev image — inherits from runtime, adds hot-reload + debug tools
+# No multi-stage needed — build speed > image size in dev
+
+FROM python:3.11-slim
+
+LABEL description="Ambrio FastAPI dev image — hot reload enabled"
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential gcc g++ curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Install ALL deps including dev extras
+COPY requirements.docker.txt .
+RUN pip install --upgrade pip \
+    && pip install -r requirements.docker.txt \
+    && pip install watchfiles ipython
+
+# Pre-download MiniLM model
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
+
+# Source is bind-mounted at runtime — no COPY needed
+# /app/ambrio → bind mount from host
+
+ENV PYTHONPATH=/app \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    AMBRIO_DB_PATH=/data/db/ambrio.db \
+    AMBRIO_CHROMA_DIR=/data/chroma \
+    CHROMA_MODE=http \
+    CHROMA_HOST=chromadb \
+    CHROMA_PORT=8000 \
+    UVICORN_HOST=0.0.0.0 \
+    UVICORN_PORT=8765
+
+EXPOSE 8765
+
+# --reload: watches /app/ambrio for changes via watchfiles
+CMD ["uvicorn", "ambrio.api.server:app",
+     "--host", "0.0.0.0",
+     "--port", "8765",
+     "--reload",
+     "--reload-dir", "/app/ambrio",
+     "--log-level", "debug"]
