@@ -209,12 +209,12 @@ class ModelRouter:
             async for chunk in self._stream_ollama(messages, tools, response_format=response_format):
                 yield chunk
 
-    async def _dispatch(self, alias: str, model: ModelDef, messages, tools, response_format=None):
+    async def _dispatch(self, alias: str, model: ModelDef, messages: list[dict], tools: list[dict] | None = None, response_format: dict | None = None):
         if model.provider == "ollama":
             async for c in self._stream_ollama(messages, tools, response_format=response_format):
                 yield c
         elif model.provider == "gemini":
-            async for c in self._stream_gemini(model, messages):
+            async for c in self._stream_gemini(model, messages, tools=tools):
                 yield c
         else:
             # All other providers use OpenAI-compatible streaming
@@ -225,7 +225,7 @@ class ModelRouter:
 
     # ── Provider adapters ─────────────────────────────────────────────────────
 
-    async def _stream_ollama(self, messages: list[dict], tools=None, response_format=None):
+    async def _stream_ollama(self, messages: list[dict], tools: list[dict] | None = None, response_format: dict | None = None):
         """Delegate to existing OllamaClient."""
         from .ollama_client import OllamaClient
         async for chunk in OllamaClient().stream(messages, tools=tools, response_format=response_format):
@@ -309,7 +309,7 @@ class ModelRouter:
                 if attempt == retries - 1:
                     raise
 
-    async def _stream_gemini(self, model: ModelDef, messages: list[dict]):
+    async def _stream_gemini(self, model: ModelDef, messages: list[dict], tools: list[dict] | None = None):
         """Stream from Google Gemini SSE endpoint."""
         import aiohttp
 
@@ -332,6 +332,17 @@ class ModelRouter:
         body = {"contents": contents}
         if system_text:
             body["system_instruction"] = {"parts": [{"text": system_text}]}
+
+        if tools:
+            body["tools"] = [{"function_declarations": [
+                {
+                    "name":        t["function"]["name"],
+                    "description": t["function"].get("description", ""),
+                    "parameters":  t["function"].get("parameters", {}),
+                }
+                for t in tools
+            ]}]
+            body["tool_config"] = {"function_calling_config": {"mode": "AUTO"}}
 
         url = (
             f"{PROVIDER_BASE_URLS['gemini']}/models/"
@@ -356,11 +367,19 @@ class ModelRouter:
                         continue
                     try:
                         obj = json.loads(decoded[5:])
-                        token = (
-                            obj["candidates"][0]["content"]["parts"][0]["text"]
-                        )
-                        if token:
-                            yield {"done": False, "message": {"content": token}}
+                        content = obj["candidates"][0].get("content", {})
+                        for part in content.get("parts", []):
+                            if "functionCall" in part:
+                                yield {"done": False, "message": {"tool_calls": [{
+                                    "function": {
+                                        "name":      part["functionCall"]["name"],
+                                        "arguments": part["functionCall"].get("args", {}),
+                                    }
+                                }]}}
+                                yield {"done": True}
+                                return
+                            if "text" in part and part["text"]:
+                                yield {"done": False, "message": {"content": part["text"]}}
                     except Exception:
                         pass
         yield {"done": True}
