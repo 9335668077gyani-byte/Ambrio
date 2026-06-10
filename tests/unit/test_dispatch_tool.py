@@ -3,15 +3,18 @@
 import pytest
 from unittest.mock import AsyncMock, patch
 from ambrio.agents.nodes.executor import _dispatch_tool, _TOOL_REGISTRY, register_tool
+import ambrio.agents.nodes.executor as exc_mod
 
 
 @pytest.fixture(autouse=True)
 def clean_registry():
-    """Isolate each test — save and restore registry state."""
-    original = dict(_TOOL_REGISTRY)
+    """Isolate each test — save and restore registry + _tools_loaded state."""
+    original_registry = dict(_TOOL_REGISTRY)
+    original_loaded = exc_mod._tools_loaded
     yield
     _TOOL_REGISTRY.clear()
-    _TOOL_REGISTRY.update(original)
+    _TOOL_REGISTRY.update(original_registry)
+    exc_mod._tools_loaded = original_loaded
 
 
 @pytest.mark.asyncio
