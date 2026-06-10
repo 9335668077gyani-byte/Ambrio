@@ -91,7 +91,9 @@ async def test_context_pruner():
             await c.execute("INSERT INTO sessions(id,title) VALUES(?,?)", (sid, "smoke"))
             await c.commit()
 
-        pruner  = ContextPruner(store, sid)
+        class _NullChroma:
+            async def search(self, *a, **kw): return []
+        pruner  = ContextPruner(chroma=_NullChroma(), fts5=store, session_id=sid)
         history = [{"role": "user", "content": f"msg {i} " * 80} for i in range(30)]
         context = await pruner.build("new question", history)
 

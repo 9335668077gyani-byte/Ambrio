@@ -1,6 +1,5 @@
 # ambrio/router/context_pruner.py
 import tiktoken
-from .memory.fts5_store  import FTS5Store
 from .memory.brain_store import BrainStore
 from .memory.token_compressor import compress_messages, compress_text
 
@@ -161,13 +160,9 @@ TOOLS (call on their own line, no explanation needed):
 
 
 class ContextPruner:
-    def __init__(
-        self,
-        store:  FTS5Store,
-        session_id: str,
-        brain: BrainStore | None = None
-    ):
-        self.store      = store
+    def __init__(self, chroma, fts5, session_id: str, brain=None):
+        self.chroma     = chroma   # PRIMARY — semantic
+        self.fts5       = fts5     # SECONDARY — keyword fallback
         self.session_id = session_id
         self.brain      = brain
 
@@ -195,12 +190,20 @@ class ContextPruner:
 
     async def _recall(self, query: str, exclude: list[dict]) -> list[dict]:
         exclude_set = {m["content"] for m in exclude}
-        rows = await self.store.search(self.session_id, query, limit=10)
-        return [
-            {"role": r["role"], "content": r["content"]}
-            for r in rows
-            if r["content"] not in exclude_set
-        ]
+
+        # Primary: ChromaDB semantic search
+        chroma_raw  = await self.chroma.search(self.session_id, query, limit=8)
+        chroma_msgs = [{"role": r["role"], "content": r["content"]}
+                       for r in chroma_raw if r["content"] not in exclude_set]
+
+        # Secondary: FTS5 keyword search (catches exact terms ChromaDB might miss)
+        fts5_raw  = await self.fts5.search(self.session_id, query, limit=5)
+        seen      = {m["content"] for m in chroma_msgs}
+        fts5_msgs = [{"role": r["role"], "content": r["content"]}
+                     for r in fts5_raw
+                     if r["content"] not in exclude_set and r["content"] not in seen]
+
+        return (chroma_msgs + fts5_msgs)[:10]
 
     def _fit(self, messages: list[dict], budget: int) -> list[dict]:
         """Greedy-drop oldest messages until within token budget."""

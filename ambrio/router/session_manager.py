@@ -11,12 +11,17 @@ log = logging.getLogger(__name__)
 
 
 class Session:
-    def __init__(self, session_id: str, db: Database, brain: BrainStore, ollama: OllamaClient):
+    def __init__(self, session_id: str, db: Database, brain: BrainStore, ollama: OllamaClient, chroma=None):
         self.id      = session_id
         self.db      = db
         self.brain   = brain
         self.store   = FTS5Store(db)
-        self.pruner  = ContextPruner(self.store, session_id, brain=brain)
+        self.pruner  = ContextPruner(
+            chroma=chroma,
+            fts5=self.store,
+            session_id=session_id,
+            brain=brain
+        )
         self.ollama  = ollama
         self._history: list[dict] = []
 
@@ -86,7 +91,8 @@ class SessionManager:
                 await c.commit()
             self._sessions[session_id] = Session(
                 session_id, self._db, self._brain,
-                self._model_router if self._model_router else self._ollama
+                self._model_router if self._model_router else self._ollama,
+                chroma=self._chroma   # NEW — pass ChromaStore instance
             )
         return self._sessions[session_id]
 
