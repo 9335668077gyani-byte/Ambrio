@@ -7,15 +7,17 @@ from ambrio.router.memory.token_compressor import compress_text
 
 log = logging.getLogger(__name__)
 
-# ── Text-based tool call extractor ───────────────────────────────────────────
-# Small models (llama3.2:1b) can't emit structured JSON tool calls.
-# They write tool calls as plain text instead, e.g.:
+# ── DEPRECATED: Text-based tool call extractor ────────────────────────────────
+# TODO(task-1.7): Remove this entire block once service.py is migrated to
+# route through the LangGraph graph (ambrio/agents/graph.py).
+# Tool extraction is now handled by the Planner → Executor nodes in the graph.
+#
+# Original purpose: Small models (llama3.2:1b) can't emit structured JSON tool
+# calls. They write tool calls as plain text instead, e.g.:
 #   sparepartspro_query("what parts are low?")
 #   sparepartspro_sql("SELECT * FROM parts")
 #   memory_search("invoice", "session-id")
-#
-# We detect these patterns and execute them directly in the router,
-# then return the result as a natural-language continuation.
+# See: ambrio/agents/graph.py for the LangGraph replacement.
 
 _TOOL_PATTERNS = [
     # sparepartspro_query("question")
@@ -273,6 +275,9 @@ class RouterService:
                 ))
 
         # ── Text-based tool call fallback (small models like llama3.2:1b) ──
+        # TODO(task-1.7): Replace this call with run_graph() from ambrio.agents.graph
+        # once _stream_chat is fully migrated to the LangGraph pipeline.
+        # See: ambrio/agents/graph.py — Tool extraction via LangGraph graph.
         tool_hit = _extract_text_tool_call(assistant)
         if tool_hit:
             tool_name, tool_args = tool_hit
