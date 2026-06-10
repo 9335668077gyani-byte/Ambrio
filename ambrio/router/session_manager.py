@@ -47,6 +47,7 @@ class SessionManager:
         self._model_router = None   # set after init via set_model_router()
         self._chroma       = None
         self._post_turn_worker = None
+        self._bg_tasks: set = set()  # strong refs prevent GC of fire-and-forget tasks
 
     async def init(self, db_path: str = "ambrio.db") -> None:
         self._db = Database(db_path)
@@ -67,7 +68,7 @@ class SessionManager:
 
         from ambrio.memory.chroma_store     import ChromaStore
         from ambrio.memory.post_turn_worker import PostTurnWorker
-        self._chroma = ChromaStore(persist_dir="./ambrio_chroma")
+        self._chroma = ChromaStore()   # persist_dir=None → AMBRIO_CHROMA_DIR env var takes effect
         await self._chroma.init()
         self._post_turn_worker = PostTurnWorker(brain=self._brain, chroma=self._chroma)
         log.info("ChromaStore + PostTurnWorker initialized")
@@ -107,10 +108,12 @@ class SessionManager:
         if self._loop:
             await self._loop.tick(session_id)
         if user_input and hasattr(self, '_post_turn_worker') and self._post_turn_worker:
-            asyncio.create_task(
+            task = asyncio.create_task(
                 self._post_turn_worker.process_turn(
                     session_id, user_input, assistant_output)
             )
+            self._bg_tasks.add(task)
+            task.add_done_callback(self._bg_tasks.discard)
 
     @property
     def brain(self) -> BrainStore | None:
