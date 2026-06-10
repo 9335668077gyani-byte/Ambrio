@@ -2,7 +2,7 @@
 """Tests for the Critic node (Maker-Checker verdict logic)."""
 import pytest
 from ambrio.agents.state import AgentState, SubTask
-from ambrio.agents.nodes.critic import critic_node
+from ambrio.agents.nodes.critic import critic_node, _first_retry_idx
 
 
 def _state(**overrides) -> AgentState:
@@ -141,3 +141,57 @@ async def test_feedback_includes_description_and_error():
     assert "search Python" in result["critic_feedback"]
     assert "connection refused" in result["critic_feedback"]
 
+
+# ── Retry-reset tests (C1 fix) ────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_fail_verdict_resets_current_subtask_to_failed_task():
+    """C1 fix: on fail verdict, current_subtask reset to first failed task index."""
+    subtasks = [
+        {"description": "done_task",   "tool": None, "args": None, "status": "done",   "result": "ok"},
+        {"description": "failed_task", "tool": "web_search", "args": {}, "status": "failed", "result": "err"},
+    ]
+    state = _state(subtasks=subtasks, current_subtask=2)  # executor had advanced past both
+    result = await critic_node(state)
+    assert result["critic_verdict"] == "fail"
+    assert result["current_subtask"] == 1    # reset to index of failed_task
+
+
+@pytest.mark.asyncio
+async def test_pass_verdict_preserves_current_subtask():
+    """Pass verdict must NOT change current_subtask."""
+    subtasks = [
+        {"description": "t1", "tool": None, "args": None, "status": "done", "result": "ok"},
+    ]
+    state = _state(subtasks=subtasks, current_subtask=1)
+    result = await critic_node(state)
+    assert result["critic_verdict"] == "pass"
+    assert result["current_subtask"] == 1    # unchanged
+
+
+# ── _first_retry_idx unit tests ───────────────────────────────────────────────
+
+def test_first_retry_idx_returns_failed_before_pending():
+    subtasks = [
+        {"description": "t1", "status": "done"},
+        {"description": "t2", "status": "pending"},
+        {"description": "t3", "status": "failed"},
+    ]
+    assert _first_retry_idx(subtasks) == 2   # failed comes first
+
+
+def test_first_retry_idx_returns_pending_when_no_failed():
+    subtasks = [
+        {"description": "t1", "status": "done"},
+        {"description": "t2", "status": "pending"},
+    ]
+    assert _first_retry_idx(subtasks) == 1
+
+
+def test_first_retry_idx_returns_zero_when_all_done():
+    subtasks = [{"description": "t1", "status": "done"}]
+    assert _first_retry_idx(subtasks) == 0
+
+
+def test_first_retry_idx_empty_list_returns_zero():
+    assert _first_retry_idx([]) == 0

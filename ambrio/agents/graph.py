@@ -9,6 +9,7 @@ Cyclic flow:
 The Critic's MAX_CRITIC_ATTEMPTS guard prevents infinite loops.
 """
 import logging
+import threading
 from typing import Any
 
 from langgraph.graph import StateGraph, END
@@ -22,6 +23,7 @@ from ambrio.agents.nodes.synthesizer import synthesizer_node
 log = logging.getLogger(__name__)
 
 _COMPILED_GRAPH: Any = None
+_graph_lock = threading.Lock()  # guards singleton construction
 
 
 def _should_retry(state: AgentState) -> str:
@@ -29,41 +31,49 @@ def _should_retry(state: AgentState) -> str:
     verdict = state.get("critic_verdict")
     if verdict == "pass":
         return "synthesizer"
+    if verdict is None:
+        log.error(
+            "[Graph] critic_verdict is None — critic did not run? Routing to synthesizer as safe fallback."
+        )
+        return "synthesizer"
     # fail or partial → retry executor
-    log.info("[Graph] critic_verdict=%s → retrying executor", verdict)
+    log.warning("[Graph] critic_verdict=%s → retrying executor", verdict)
     return "executor"
 
 
 def build_graph():
     """Build and compile the LangGraph state machine. Returns compiled graph."""
     global _COMPILED_GRAPH
-    if _COMPILED_GRAPH is not None:
+    if _COMPILED_GRAPH is not None:          # fast path — no lock needed
         return _COMPILED_GRAPH
+    with _graph_lock:                         # double-checked locking
+        if _COMPILED_GRAPH is not None:       # re-check under lock
+            return _COMPILED_GRAPH
 
-    g = StateGraph(AgentState)
+        g = StateGraph(AgentState)
 
-    # Register nodes
-    g.add_node("planner",     planner_node)
-    g.add_node("executor",    executor_node)
-    g.add_node("critic",      critic_node)
-    g.add_node("synthesizer", synthesizer_node)
+        # Register nodes
+        g.add_node("planner",     planner_node)
+        g.add_node("executor",    executor_node)
+        g.add_node("critic",      critic_node)
+        g.add_node("synthesizer", synthesizer_node)
 
-    # Entry point
-    g.set_entry_point("planner")
+        # Entry point
+        g.set_entry_point("planner")
 
-    # Fixed edges
-    g.add_edge("planner",     "executor")
-    g.add_edge("executor",    "critic")
-    g.add_edge("synthesizer", END)
+        # Fixed edges
+        g.add_edge("planner",     "executor")
+        g.add_edge("executor",    "critic")
+        g.add_edge("synthesizer", END)
 
-    # Conditional: critic routes back to executor or forward to synthesizer
-    g.add_conditional_edges(
-        "critic",
-        _should_retry,
-        {"executor": "executor", "synthesizer": "synthesizer"},
-    )
+        # Conditional: critic routes back to executor or forward to synthesizer
+        g.add_conditional_edges(
+            "critic",
+            _should_retry,
+            {"executor": "executor", "synthesizer": "synthesizer"},
+        )
 
-    _COMPILED_GRAPH = g.compile()
+        _COMPILED_GRAPH = g.compile()
     return _COMPILED_GRAPH
 
 
