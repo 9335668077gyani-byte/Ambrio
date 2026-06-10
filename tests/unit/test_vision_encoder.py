@@ -25,3 +25,28 @@ def test_raises_on_non_image(tmp_path):
 def test_raises_on_missing_file():
     with pytest.raises(FileNotFoundError):
         encode_image_for_gemini("does_not_exist.png")
+
+def test_raises_on_large_file(tmp_path, monkeypatch):
+    f = tmp_path / "huge.jpg"
+    f.write_bytes(b"\xff\xd8\xfffakeimage")
+    # Mock getsize to return 21 MB
+    import os
+    monkeypatch.setattr(os.path, "getsize", lambda p: 21 * 1024 * 1024)
+    
+    with pytest.raises(ImageEncoderError, match="Image is .* max is 20MB"):
+        encode_image_for_gemini(str(f))
+
+def test_raises_on_read_error(tmp_path):
+    f = tmp_path / "test.jpg"
+    f.write_bytes(b"\xff\xd8\xfffakeimage")
+    
+    import builtins
+    original_open = builtins.open
+    
+    def mock_open(*args, **kwargs):
+        raise PermissionError("Access Denied")
+        
+    with pytest.MonkeyPatch.context() as m:
+        m.setattr("builtins.open", mock_open)
+        with pytest.raises(ImageEncoderError, match="Failed to read and encode image: Access Denied"):
+            encode_image_for_gemini(str(f))

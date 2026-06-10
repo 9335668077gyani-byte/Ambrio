@@ -14,6 +14,8 @@ SUPPORTED_IMAGE_MIMES = {
     ".heif": "image/heif"
 }
 
+MAX_SIZE_MB = 20
+
 class ImageEncoderError(ValueError): pass
 
 def encode_image_for_gemini(path: str | os.PathLike) -> dict[str, str]:
@@ -23,6 +25,10 @@ def encode_image_for_gemini(path: str | os.PathLike) -> dict[str, str]:
     """
     if not os.path.isfile(path):
         raise FileNotFoundError(f"Image not found: {path}")
+
+    size_mb = os.path.getsize(path) / 1_048_576
+    if size_mb > MAX_SIZE_MB:
+        raise ImageEncoderError(f"Image is {size_mb:.1f}MB — max is {MAX_SIZE_MB}MB")
 
     ext = Path(path).suffix.lower()
     if ext not in SUPPORTED_IMAGE_MIMES:
@@ -34,5 +40,5 @@ def encode_image_for_gemini(path: str | os.PathLike) -> dict[str, str]:
         with open(path, "rb") as f:
             b64_data = base64.b64encode(f.read()).decode("utf-8")
         return {"mime_type": mime, "data": b64_data}
-    except Exception as e:
+    except (OSError, ValueError) as e:
         raise ImageEncoderError(f"Failed to read and encode image: {e}") from e
