@@ -1,9 +1,10 @@
 # ambrio/router/service.py
-import asyncio, zmq, zmq.asyncio, msgpack, logging, re, json
+import asyncio, zmq, zmq.asyncio, msgpack, logging, re, json, time
 from .session_manager import SessionManager
 from .tool_registry import ToolRegistry
 from ..ui.ipc.message_protocol import Frame, MsgType
 from ambrio.router.memory.token_compressor import compress_text
+from ambrio.agents.runner import run_agent
 
 log = logging.getLogger(__name__)
 
@@ -75,7 +76,6 @@ class RouterService:
             ))
 
     async def _stream_chat(self, identity: bytes, frame: Frame) -> None:
-        import time
         session      = await self.sessions.get_or_create(frame.session_id)
         user_content = frame.payload.get("content", "")
         messages     = await session.build_context(user_content)
@@ -83,7 +83,6 @@ class RouterService:
         full_answer  = ""
         token_count  = 0
 
-        from ambrio.agents.runner import run_agent
         async for token in run_agent(frame.session_id, user_content, messages):
             token_count += 1
             full_answer += token

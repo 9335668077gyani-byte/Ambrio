@@ -9,7 +9,7 @@ Strategy: we build a *minimal* FastAPI app from the route functions themselves
 ChromaStore.
 """
 import pytest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -29,13 +29,14 @@ def rest_client():
     # Re-register the route functions on the bare app
     @bare_app.get("/health")
     async def health():
-        return {"status": "ok", "version": "4.0.0"}
+        from ambrio.api.models import HealthResponse
+        return HealthResponse(status="ok", version=srv_mod.VERSION)
 
     @bare_app.get("/sessions")
     async def list_sessions():
         if not srv_mod._session_manager:
             return []
-        return list(srv_mod._session_manager._sessions.keys())
+        return srv_mod._session_manager.list_session_ids()  # Fix 4 — public API
 
     with TestClient(bare_app) as client:
         yield client
@@ -65,28 +66,20 @@ class TestHealthEndpoint:
 class TestSessionsEndpoint:
     def test_sessions_returns_empty_when_no_manager(self, rest_client):
         """When _session_manager is None, /sessions returns []."""
-        import ambrio.api.server as srv_mod
-        original = srv_mod._session_manager
-        srv_mod._session_manager = None
-        try:
+        # Fix 7 — use patch() instead of manual global mutation
+        with patch("ambrio.api.server._session_manager", None):
             response = rest_client.get("/sessions")
-        finally:
-            srv_mod._session_manager = original
 
         assert response.status_code == 200
         assert response.json() == []
 
     def test_sessions_returns_session_ids(self, rest_client):
         """When a mock session manager exists, /sessions returns its keys."""
-        import ambrio.api.server as srv_mod
         mock_sm = MagicMock()
-        mock_sm._sessions = {"abc123": object(), "def456": object()}
-        original = srv_mod._session_manager
-        srv_mod._session_manager = mock_sm
-        try:
+        mock_sm.list_session_ids.return_value = ["abc123", "def456"]  # Fix 4 + Fix 7
+        # Fix 7 — use patch() instead of manual global mutation
+        with patch("ambrio.api.server._session_manager", mock_sm):
             response = rest_client.get("/sessions")
-        finally:
-            srv_mod._session_manager = original
 
         assert response.status_code == 200
         body = response.json()
@@ -138,3 +131,14 @@ class TestModels:
         tok = ChatToken(data="hello")
         assert tok.type == "token"
         assert tok.data == "hello"
+
+
+# ---------------------------------------------------------------------------
+# Tests — VERSION constant
+# ---------------------------------------------------------------------------
+
+class TestVersionConstant:
+    def test_version_constant_is_string(self):
+        import ambrio.api.server as srv_mod
+        assert isinstance(srv_mod.VERSION, str)
+        assert srv_mod.VERSION == "4.0.0"

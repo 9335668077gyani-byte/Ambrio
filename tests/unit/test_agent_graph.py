@@ -140,6 +140,8 @@ async def test_graph_synthesizer_crash_returns_fallback():
         result = await run_graph(session_id="synth-crash", user_input="test")
 
     assert result["final_answer"] == _FALLBACK_ANSWER
+
+
 @pytest.mark.asyncio
 async def test_full_graph_simple_query():
     from unittest.mock import AsyncMock, patch

@@ -24,3 +24,14 @@ def test_allows_pdf(tmp_path):
 def test_raises_file_not_found():
     with pytest.raises(FileNotFoundError):
         validate_file("C:/does/not/exist.pdf")
+
+def test_raises_file_too_large(tmp_path, monkeypatch):
+    f = tmp_path / "large.pdf"
+    f.write_bytes(b"dummy")
+    
+    # Mock getsize to simulate a 51MB file
+    import os
+    monkeypatch.setattr(os.path, "getsize", lambda x: 51 * 1_048_576)
+    
+    with pytest.raises(FileTooLargeError):
+        validate_file(str(f))

@@ -191,17 +191,20 @@ class ContextPruner:
     async def _recall(self, query: str, exclude: list[dict]) -> list[dict]:
         exclude_set = {m["content"] for m in exclude}
 
-        # Primary: ChromaDB semantic search
-        chroma_raw  = await self.chroma.search(self.session_id, query, limit=8)
-        chroma_msgs = [{"role": r["role"], "content": r["content"]}
-                       for r in chroma_raw if r["content"] not in exclude_set]
+        # Primary: ChromaDB semantic search (skipped if chroma not available)
+        chroma_msgs = []
+        if self.chroma is not None:
+            chroma_raw  = await self.chroma.search(self.session_id, query, limit=8)
+            chroma_msgs = [{"role": r["role"], "content": r["content"]}
+                           for r in chroma_raw if r["content"] not in exclude_set]
 
         # Secondary: FTS5 keyword search (catches exact terms ChromaDB might miss)
         fts5_raw  = await self.fts5.search(self.session_id, query, limit=5)
-        seen      = {m["content"] for m in chroma_msgs}
+        seen      = {(m["role"], m["content"]) for m in chroma_msgs}
         fts5_msgs = [{"role": r["role"], "content": r["content"]}
                      for r in fts5_raw
-                     if r["content"] not in exclude_set and r["content"] not in seen]
+                     if r["content"] not in exclude_set
+                     and (r["role"], r["content"]) not in seen]
 
         return (chroma_msgs + fts5_msgs)[:10]
 

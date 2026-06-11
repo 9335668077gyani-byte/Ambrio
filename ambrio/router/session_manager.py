@@ -103,6 +103,10 @@ class SessionManager:
             session.ollama = router
         log.info("ModelRouter injected into SessionManager")
 
+    def list_session_ids(self) -> list[str]:
+        """Return all active session IDs."""
+        return list(self._sessions.keys())
+
     async def post_turn_tick(self, session_id: str,
                               user_input: str = "",
                               assistant_output: str = "") -> None:

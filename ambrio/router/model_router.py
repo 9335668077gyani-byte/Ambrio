@@ -182,7 +182,7 @@ class ModelRouter:
     async def stream(
         self,
         messages:   list[dict],
-        tools:      list | None = None,
+        tools:      list[dict] | None = None,
         task_type:  str | None  = None,
         response_format: dict | None = None,
     ) -> AsyncIterator[dict]:
@@ -334,14 +334,15 @@ class ModelRouter:
             body["system_instruction"] = {"parts": [{"text": system_text}]}
 
         if tools:
-            body["tools"] = [{"function_declarations": [
-                {
-                    "name":        t["function"]["name"],
-                    "description": t["function"].get("description", ""),
-                    "parameters":  t["function"].get("parameters", {}),
-                }
-                for t in tools
-            ]}]
+            func_decls = []
+            for t in tools:
+                decl = {"name": t["function"]["name"]}
+                if "description" in t["function"] and t["function"]["description"]:
+                    decl["description"] = t["function"]["description"]
+                if "parameters" in t["function"]:
+                    decl["parameters"] = t["function"]["parameters"]
+                func_decls.append(decl)
+            body["tools"] = [{"function_declarations": func_decls}]
             body["tool_config"] = {"function_calling_config": {"mode": "AUTO"}}
 
         url = (
@@ -367,20 +368,24 @@ class ModelRouter:
                         continue
                     try:
                         obj = json.loads(decoded[5:])
-                        content = obj["candidates"][0].get("content", {})
+                        candidates = obj.get("candidates", [])
+                        if not candidates:
+                            continue
+                        content = candidates[0].get("content", {})
                         for part in content.get("parts", []):
                             if "functionCall" in part:
                                 yield {"done": False, "message": {"tool_calls": [{
                                     "function": {
                                         "name":      part["functionCall"]["name"],
-                                        "arguments": part["functionCall"].get("args", {}),
+                                        "arguments": json.dumps(part["functionCall"].get("args", {})),
                                     }
                                 }]}}
                                 yield {"done": True}
                                 return
                             if "text" in part and part["text"]:
                                 yield {"done": False, "message": {"content": part["text"]}}
-                    except Exception:
+                    except Exception as e:
+                        log.debug(f"Gemini parse error: {e}", exc_info=True)
                         pass
         yield {"done": True}
 
