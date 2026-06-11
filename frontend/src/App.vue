@@ -112,7 +112,6 @@
           rows="1"
           :disabled="isLoading"
           @keydown.enter.exact.prevent="handleSend"
-          @keydown.shift.enter="addNewline"
           @focus="inputFocused = true"
           @blur="inputFocused = false"
           @input="autoResize"
@@ -145,10 +144,16 @@
 <script setup>
 import { ref, computed, nextTick, watch } from 'vue'
 import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 import { useWebSocket } from './composables/useWebSocket.js'
 
-// Session
-const sessionId = crypto.randomUUID()
+// Session — persisted across page reloads (I3)
+const SESSION_KEY = 'ambrio_session_id'
+const sessionId = localStorage.getItem(SESSION_KEY) ?? (() => {
+  const id = crypto.randomUUID()
+  localStorage.setItem(SESSION_KEY, id)
+  return id
+})()
 const shortSessionId = computed(() => sessionId.slice(0, 8).toUpperCase())
 
 // WebSocket
@@ -180,11 +185,11 @@ const suggestions = [
   'Analyze the codebase structure',
 ]
 
-// Markdown renderer
-marked.setOptions({ breaks: true, gfm: true })
+// Markdown renderer — C2: async:false, C1: DOMPurify sanitization
+marked.setOptions({ breaks: true, gfm: true, async: false })
 function renderMarkdown(text) {
   if (!text) return ''
-  return marked.parse(text)
+  return DOMPurify.sanitize(/** @type {string} */ (marked.parse(text)))
 }
 
 function handleSend() {
@@ -199,9 +204,7 @@ function handleSend() {
   })
 }
 
-function addNewline() {
-  // Shift+Enter naturally adds newline in textarea — no action needed
-}
+
 
 function sendSuggestion(chip) {
   if (isLoading.value) return
@@ -215,13 +218,16 @@ function autoResize() {
   el.style.height = Math.min(el.scrollHeight, 160) + 'px'
 }
 
-// Auto-scroll to bottom when messages update
+// Auto-scroll — only if user is near the bottom (I5)
 watch(
   messages,
   async () => {
     await nextTick()
     const el = messagesEl.value
-    if (el) el.scrollTop = el.scrollHeight
+    if (!el) return
+    const threshold = 100  // px from bottom
+    const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < threshold
+    if (isNearBottom) el.scrollTop = el.scrollHeight
   },
   { deep: true }
 )
@@ -482,8 +488,13 @@ watch(
   font-size: 0.9rem;
   line-height: 1.65;
   color: var(--text);
-  white-space: pre-wrap;
+  white-space: normal;
   word-break: break-word;
+}
+
+/* User messages keep pre-wrap for literal newlines (M3) */
+.message-wrapper.user .message-content {
+  white-space: pre-wrap;
 }
 
 /* Markdown rendered content styles */
