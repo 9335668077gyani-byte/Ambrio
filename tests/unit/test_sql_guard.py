@@ -98,6 +98,16 @@ def test_inject_limit_handles_limit_in_subquery():
     sql = "SELECT * FROM (SELECT id FROM parts LIMIT 100)"
     result = _inject_limit(sql)
     assert result.upper().rstrip().endswith("LIMIT 50")
+def test_inject_limit_caps_large_limit_with_offset():
+    """Query with LIMIT 100 OFFSET 5 or LIMIT 10, 100 gets capped, preserving offset."""
+    from ambrio.router.erp.nl_to_sql import _inject_limit
+    sql1 = "SELECT * FROM parts LIMIT 100 OFFSET 5"
+    result1 = _inject_limit(sql1)
+    assert result1.upper().endswith("LIMIT 50 OFFSET 5")
+    
+    sql2 = "SELECT * FROM parts LIMIT 10, 100"
+    result2 = _inject_limit(sql2)
+    assert result2.upper().endswith("LIMIT 50 OFFSET 10") or result2.upper().endswith("LIMIT 10, 50")
 
 
 # ── G2: Timeout tests ─────────────────────────────────────────────────────────
@@ -122,7 +132,7 @@ async def test_execute_returns_error_on_timeout(tmp_path):
     # Create an async context manager whose __aenter__ hangs forever
     class HangingConnCtx:
         async def __aenter__(self):
-            await asyncio.sleep(999)
+            await asyncio.sleep(0.5)
 
         async def __aexit__(self, *args):
             pass

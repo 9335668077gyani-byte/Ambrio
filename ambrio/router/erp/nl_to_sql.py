@@ -34,22 +34,38 @@ _MAX_ROWS:           int   = 50    # G2: absolute row ceiling
 def _inject_limit(sql: str) -> str:
     """Ensure the outermost SELECT has LIMIT <= _MAX_ROWS.
 
-    Rules:
-    - No LIMIT present  → append LIMIT 50
-    - LIMIT N where N > 50 → replace with LIMIT 50
-    - LIMIT N where N <= 50 → leave unchanged
+    Handles basic 'LIMIT N', 'LIMIT M, N', and 'LIMIT N OFFSET M'.
     """
     sql = sql.strip().rstrip(";").rstrip()
-    # Match a LIMIT clause at the very end of the string (outer query only)
-    outer_limit = _re.search(r'\bLIMIT\s+(\d+)\s*$', sql, _re.IGNORECASE)
-    if outer_limit:
-        n = int(outer_limit.group(1))
-        if n > _MAX_ROWS:
-            sql = sql[:outer_limit.start()] + f"LIMIT {_MAX_ROWS}"
-        # else: already within budget — leave as-is
-    else:
-        sql = f"{sql} LIMIT {_MAX_ROWS}"
-    return sql
+    
+    match = _re.search(r'\bLIMIT\s+.*$', sql, _re.IGNORECASE)
+    if not match:
+        return f"{sql} LIMIT {_MAX_ROWS}"
+
+    limit_clause = match.group(0).upper()
+    
+    m_comma = _re.search(r'^LIMIT\s+(\d+)\s*,\s*(\d+)$', limit_clause)
+    if m_comma:
+        offset, count = int(m_comma.group(1)), int(m_comma.group(2))
+        if count > _MAX_ROWS:
+            return sql[:match.start()] + f"LIMIT {offset}, {_MAX_ROWS}"
+        return sql
+        
+    m_offset = _re.search(r'^LIMIT\s+(\d+)\s+OFFSET\s+(\d+)$', limit_clause)
+    if m_offset:
+        count, offset = int(m_offset.group(1)), int(m_offset.group(2))
+        if count > _MAX_ROWS:
+            return sql[:match.start()] + f"LIMIT {_MAX_ROWS} OFFSET {offset}"
+        return sql
+
+    m_simple = _re.search(r'^LIMIT\s+(\d+)$', limit_clause)
+    if m_simple:
+        count = int(m_simple.group(1))
+        if count > _MAX_ROWS:
+            return sql[:match.start()] + f"LIMIT {_MAX_ROWS}"
+        return sql
+
+    return sql[:match.start()] + f"LIMIT {_MAX_ROWS}"
 
 NL_TO_SQL_PROMPT = """\
 You are an expert SQLite query generator for a spare parts shop ERP database.
