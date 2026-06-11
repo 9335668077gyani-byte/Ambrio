@@ -14,6 +14,8 @@ Inspired by Hermes tool-use patterns — uses a two-shot approach:
   Shot 1: NL → SQL
   Shot 2: rows + question → natural language answer
 """
+import asyncio
+import re as _re
 import aiosqlite, os, logging, json
 from .schema_context import SCHEMA_CONTEXT
 from .sql_guard      import validate, extract_sql, SQLGuardError
@@ -24,6 +26,30 @@ log = logging.getLogger(__name__)
 SPARE_DB = os.path.join(
     os.environ.get("APPDATA", ""), "SparePartsPro", "spare_parts.db"
 )
+
+_QUERY_TIMEOUT_SECS: float = 3.0   # G2: 3000ms hard cap on SQL execution
+_MAX_ROWS:           int   = 50    # G2: absolute row ceiling
+
+
+def _inject_limit(sql: str) -> str:
+    """Ensure the outermost SELECT has LIMIT <= _MAX_ROWS.
+
+    Rules:
+    - No LIMIT present  → append LIMIT 50
+    - LIMIT N where N > 50 → replace with LIMIT 50
+    - LIMIT N where N <= 50 → leave unchanged
+    """
+    sql = sql.strip().rstrip(";").rstrip()
+    # Match a LIMIT clause at the very end of the string (outer query only)
+    outer_limit = _re.search(r'\bLIMIT\s+(\d+)\s*$', sql, _re.IGNORECASE)
+    if outer_limit:
+        n = int(outer_limit.group(1))
+        if n > _MAX_ROWS:
+            sql = sql[:outer_limit.start()] + f"LIMIT {_MAX_ROWS}"
+        # else: already within budget — leave as-is
+    else:
+        sql = f"{sql} LIMIT {_MAX_ROWS}"
+    return sql
 
 NL_TO_SQL_PROMPT = """\
 You are an expert SQLite query generator for a spare parts shop ERP database.
@@ -111,13 +137,20 @@ class ERPQueryEngine:
         return response.strip()
 
     async def _execute(self, sql: str) -> tuple[list[dict], str | None]:
+        """Execute validated SQL. Injects LIMIT and enforces 3s timeout."""
+        sql = _inject_limit(sql)  # G2: force LIMIT before every execution
         try:
-            async with aiosqlite.connect(SPARE_DB) as conn:
-                conn.row_factory = aiosqlite.Row
-                await conn.execute("PRAGMA query_only = ON")
-                cur = await conn.execute(sql)
-                rows = await cur.fetchall()
-            return [dict(r) for r in rows[:50]], None
+            async with asyncio.timeout(_QUERY_TIMEOUT_SECS):   # G2: 3000ms cap
+                async with aiosqlite.connect(SPARE_DB) as conn:
+                    conn.row_factory = aiosqlite.Row
+                    await conn.execute("PRAGMA query_only = ON")
+                    cur  = await conn.execute(sql)
+                    rows = await cur.fetchall()
+            return [dict(r) for r in rows[:_MAX_ROWS]], None
+        except TimeoutError:
+            err = f"Query timed out after {_QUERY_TIMEOUT_SECS}s"
+            log.warning("[ERP] %s | sql=%s", err, sql[:120])
+            return [], err
         except Exception as e:
             return [], str(e)
 
