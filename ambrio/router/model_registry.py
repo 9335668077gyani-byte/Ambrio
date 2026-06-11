@@ -255,6 +255,7 @@ DEFAULT_ROUTING: dict[str, str] = {
     "complex":   os.environ.get("AMBRIO_MODEL_COMPLEX",   "openrouter/llama-3.3-70b"),  # heavy tasks
     "code":      os.environ.get("AMBRIO_MODEL_CODE",      "openrouter/deepseek-v3"),    # coding
     "reasoning": os.environ.get("AMBRIO_MODEL_REASONING", "openrouter/deepseek-v3"),    # reasoning
+    "cloud_reasoning": os.environ.get("AMBRIO_MODEL_CLOUD_REASONING", "groq/llama-3.3-70b"), # planner/critic pin
     "vision":    os.environ.get("AMBRIO_MODEL_VISION",    "gemini/2.5-flash"),           # vision/images — can actually see
     "fast":      os.environ.get("AMBRIO_MODEL_FAST",      "openrouter/llama-3.1-8b"),   # ultra fast
     # ── Task-specific routes ──────────────────────────────────────────────────

@@ -87,7 +87,7 @@ async def _call_planner_llm(user_input: str) -> list[SubTask]:
         {"role": "user",   "content": user_input},
     ]
     full_text = ""
-    async for chunk in router.stream(messages, task_type="reasoning"):
+    async for chunk in router.stream(messages, task_type="cloud_reasoning"):
         if chunk.get("done"):
             break
         full_text += chunk.get("message", {}).get("content", "")
