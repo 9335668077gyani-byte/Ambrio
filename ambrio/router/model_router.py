@@ -309,16 +309,13 @@ class ModelRouter:
                 if attempt == retries - 1:
                     raise
 
-    async def _stream_gemini(self, model: ModelDef, messages: list[dict], tools: list[dict] | None = None):
+    async def _stream_gemini(self, model: ModelDef, messages: list[dict], tools: list[dict] | None = None, retries: int = 3):
         """Stream from Google Gemini SSE endpoint."""
         import aiohttp
 
         pool    = self._pools.get("gemini")
-        api_key = pool.next() if pool else None
-        if not api_key:
-            raise RuntimeError("No Gemini API keys configured")
-
-        # Convert messages — Gemini uses "user" / "model" roles only
+        
+        # Build request body once
         contents = [
             {
                 "role":  "model" if m["role"] == "assistant" else "user",
@@ -345,48 +342,55 @@ class ModelRouter:
             body["tools"] = [{"function_declarations": func_decls}]
             body["tool_config"] = {"function_calling_config": {"mode": "AUTO"}}
 
-        url = (
-            f"{PROVIDER_BASE_URLS['gemini']}/models/"
-            f"{model.model_id}:streamGenerateContent"
-            f"?key={api_key}&alt=sse"
-        )
+        for attempt in range(retries):
+            api_key = pool.next() if pool else None
+            if not api_key:
+                raise RuntimeError("No Gemini API keys configured")
 
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                url, json=body, timeout=aiohttp.ClientTimeout(total=120)
-            ) as resp:
-                if resp.status == 429:
-                    pool.mark_limited()
-                    raise RuntimeError("Gemini rate limited — rotating key")
-                if resp.status == 400:
-                    text = await resp.text()
-                    raise RuntimeError(f"Gemini bad request: {text[:200]}")
-                resp.raise_for_status()
-                async for line in resp.content:
-                    decoded = line.decode(errors="ignore").strip()
-                    if not decoded.startswith("data:"):
+            url = (
+                f"{PROVIDER_BASE_URLS['gemini']}/models/"
+                f"{model.model_id}:streamGenerateContent"
+                f"?key={api_key}&alt=sse"
+            )
+
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    url, json=body, timeout=aiohttp.ClientTimeout(total=120)
+                ) as resp:
+                    if resp.status == 429:
+                        pool.mark_limited()
+                        log.warning(f"Gemini rate limited (attempt {attempt+1}/{retries}) — rotating key")
                         continue
-                    try:
-                        obj = json.loads(decoded[5:])
-                        candidates = obj.get("candidates", [])
-                        if not candidates:
+                    if resp.status == 400:
+                        text = await resp.text()
+                        raise RuntimeError(f"Gemini bad request: {text[:200]}")
+                    resp.raise_for_status()
+                    async for line in resp.content:
+                        decoded = line.decode(errors="ignore").strip()
+                        if not decoded.startswith("data:"):
                             continue
-                        content = candidates[0].get("content", {})
-                        for part in content.get("parts", []):
-                            if "functionCall" in part:
-                                yield {"done": False, "message": {"tool_calls": [{
-                                    "function": {
-                                        "name":      part["functionCall"]["name"],
-                                        "arguments": json.dumps(part["functionCall"].get("args", {})),
-                                    }
-                                }]}}
-                                yield {"done": True}
-                                return
-                            if "text" in part and part["text"]:
-                                yield {"done": False, "message": {"content": part["text"]}}
-                    except Exception as e:
-                        log.debug(f"Gemini parse error: {e}", exc_info=True)
-                        pass
+                        try:
+                            obj = json.loads(decoded[5:])
+                            candidates = obj.get("candidates", [])
+                            if not candidates:
+                                continue
+                            content = candidates[0].get("content", {})
+                            for part in content.get("parts", []):
+                                if "functionCall" in part:
+                                    yield {"done": False, "message": {"tool_calls": [{
+                                        "function": {
+                                            "name":      part["functionCall"]["name"],
+                                            "arguments": json.dumps(part["functionCall"].get("args", {})),
+                                        }
+                                    }]}}
+                                    yield {"done": True}
+                                    return
+                                if "text" in part and part["text"]:
+                                    yield {"done": False, "message": {"content": part["text"]}}
+                        except Exception as e:
+                            log.debug(f"Gemini parse error: {e}", exc_info=True)
+                            pass
+            break
         yield {"done": True}
 
     # ── Inspection helpers ────────────────────────────────────────────────────

@@ -250,20 +250,20 @@ REGISTRY: dict[str, ModelDef] = {
 import os
 
 DEFAULT_ROUTING: dict[str, str] = {
-    "simple":    os.environ.get("AMBRIO_MODEL_SIMPLE",    "openrouter/llama-3.3-70b"),  # fast, obedient
-    "chat":      os.environ.get("AMBRIO_MODEL_CHAT",      "openrouter/llama-3.3-70b"),  # best free chat
-    "complex":   os.environ.get("AMBRIO_MODEL_COMPLEX",   "openrouter/llama-3.3-70b"),  # heavy tasks
-    "code":      os.environ.get("AMBRIO_MODEL_CODE",      "openrouter/deepseek-v3"),    # coding
-    "reasoning": os.environ.get("AMBRIO_MODEL_REASONING", "openrouter/deepseek-v3"),    # reasoning
+    "simple":    os.environ.get("AMBRIO_MODEL_SIMPLE",    "groq/llama-3.3-70b"),  # fast, obedient
+    "chat":      os.environ.get("AMBRIO_MODEL_CHAT",      "groq/llama-3.3-70b"),  # best free chat
+    "complex":   os.environ.get("AMBRIO_MODEL_COMPLEX",   "groq/llama-3.3-70b"),  # heavy tasks
+    "code":      os.environ.get("AMBRIO_MODEL_CODE",      "groq/deepseek-r1-70b"),# coding
+    "reasoning": os.environ.get("AMBRIO_MODEL_REASONING", "groq/deepseek-r1-70b"),# reasoning
     "cloud_reasoning": os.environ.get("AMBRIO_MODEL_CLOUD_REASONING", "groq/llama-3.3-70b"), # planner/critic pin
-    "vision":    os.environ.get("AMBRIO_MODEL_VISION",    "gemini/2.5-flash"),           # vision/images — can actually see
-    "fast":      os.environ.get("AMBRIO_MODEL_FAST",      "openrouter/llama-3.1-8b"),   # ultra fast
+    "vision":    os.environ.get("AMBRIO_MODEL_VISION",    "gemini/2.5-flash"),    # vision/images — can actually see
+    "fast":      os.environ.get("AMBRIO_MODEL_FAST",      "groq/llama-3.1-8b"),   # ultra fast
     # ── Task-specific routes ──────────────────────────────────────────────────
     # OCR/image/doc: the REAL work is done by Python tools (easyocr, Pillow, docx).
     # The LLM just needs to call the right tool — use the most obedient fast model.
-    "ocr":       os.environ.get("AMBRIO_MODEL_OCR",       "openrouter/llama-3.3-70b"),  # calls img_ocr()
-    "image":     os.environ.get("AMBRIO_MODEL_IMAGE",     "openrouter/llama-3.3-70b"),  # calls doc_convert/combine
-    "doc":       os.environ.get("AMBRIO_MODEL_DOC",       "openrouter/llama-3.3-70b"),  # calls doc_read/save
+    "ocr":       os.environ.get("AMBRIO_MODEL_OCR",       "groq/llama-3.3-70b"),  # calls img_ocr()
+    "image":     os.environ.get("AMBRIO_MODEL_IMAGE",     "groq/llama-3.3-70b"),  # calls doc_convert/combine
+    "doc":       os.environ.get("AMBRIO_MODEL_DOC",       "groq/llama-3.3-70b"),  # calls doc_read/save
 }
 
 # ── Fallback chain when primary model's keys are exhausted ───────────────────

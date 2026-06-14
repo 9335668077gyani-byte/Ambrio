@@ -265,15 +265,15 @@ async def doc_extract_table(path: str, page: int = 1) -> dict:
     description=(
         'Save edited text content back to a document file. '
         'Use this after editing a document to write it back to disk. '
-        'Supports .docx (Word), .txt, .csv, .md, .html and any text format. '
-        'For .docx files, creates a proper Word document. '
+        'Supports .pdf, .docx (Word), .txt, .csv, .md, .html and any text format. '
+        'For .pdf and .docx files, creates a proper formatted document. '
         'Args: path (str) — original file path, content (str) — full edited text content.'
     )
 )
 async def doc_save(path: str, content: str) -> dict:
     """
     Save edited content back to a document.
-    - .docx / .doc  → writes a proper Word document (each paragraph on new line)
+    - .pdf / .docx / .doc  → writes a proper document (each paragraph on new line)
     - .txt / .md / .csv / .html / .py / etc. → plain text UTF-8
     - Always saves next to the original with '_edited' suffix to avoid overwriting
     """
@@ -283,6 +283,35 @@ async def doc_save(path: str, content: str) -> dict:
         p.parent.mkdir(parents=True, exist_ok=True)
 
         ext = p.suffix.lower()
+
+        # Save as PDF
+        if ext == '.pdf':
+            try:
+                import docx as _docx
+                from docx import Document
+                from docx.shared import Pt
+                doc = Document()
+                for para in content.split('\n'):
+                    if para.strip():
+                        p_obj = doc.add_paragraph(para)
+                        p_obj.style.font.size = Pt(11)
+                    else:
+                        doc.add_paragraph('')
+                temp_docx = p.parent / (p.stem + '_temp.docx')
+                doc.save(str(temp_docx))
+                from ambrio.router.tools.convert_tool import doc_convert
+                res = await doc_convert(str(temp_docx), 'pdf')
+                temp_docx.unlink(missing_ok=True)
+                if res.get('success'):
+                    return {
+                        'success':   True,
+                        'saved_to':  res['saved_to'],
+                        'format':    'PDF Document',
+                        'answer':    f"Done! Edited document saved as PDF to: {res['saved_to']}",
+                    }
+                return res
+            except ImportError:
+                return {'error': 'PDF generation requires python-docx installed.', 'success': False}
 
         # Save as proper Word document
         if ext in ('.docx', '.doc'):

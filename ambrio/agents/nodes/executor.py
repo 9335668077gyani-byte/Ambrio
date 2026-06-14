@@ -8,34 +8,30 @@ from ambrio.agents.state import AgentState, SubTask
 log = logging.getLogger(__name__)
 
 # ── Tool registry ─────────────────────────────────────────────────────────────
-# Maps tool name → async callable(args: dict) -> Any
-# Populated lazily to avoid circular imports; tools register themselves.
-_TOOL_REGISTRY: dict[str, Any] = {}
-_tools_loaded: bool = False
+_registry_instance = None
 
-
-def register_tool(name: str):
-    """Decorator: register an async function as an executable tool.
-
-    Usage:
-        @register_tool("web_search")
-        async def web_search(args: dict) -> Any: ...
-    """
-    def decorator(fn):
-        _TOOL_REGISTRY[name] = fn
-        return fn
-    return decorator
-
+def _get_registry():
+    global _registry_instance
+    if _registry_instance is None:
+        from ambrio.router.tool_registry import ToolRegistry
+        _registry_instance = ToolRegistry()
+        # Ensure tools are imported so decorators run
+        import ambrio.router.tools.memory_tool        # noqa
+        import ambrio.router.tools.sparepartspro_tool  # noqa
+        import ambrio.router.tools.sandbox_tool        # noqa
+        import ambrio.router.tools.file_tool           # noqa
+        import ambrio.router.tools.doc_tool            # noqa
+        import ambrio.router.tools.convert_tool        # noqa
+        import ambrio.router.tools.web_tool            # noqa
+        import ambrio.router.tools.img_tool            # noqa
+    return _registry_instance
 
 async def _dispatch_tool(tool_name: str, args: dict[str, Any] | None) -> Any:
-    """Look up and call a registered tool. Raises KeyError if unknown."""
-    global _tools_loaded
-    if tool_name not in _TOOL_REGISTRY and not _tools_loaded:
-        import ambrio.tools  # noqa: F401  (side-effect import — registers all tools)
-        _tools_loaded = True
-    if tool_name not in _TOOL_REGISTRY:
+    registry = _get_registry()
+    try:
+        return await registry.dispatch(tool_name, args or {})
+    except KeyError:
         raise KeyError(f"Unknown tool: '{tool_name}'")
-    return await _TOOL_REGISTRY[tool_name](args or {})
 
 
 # ── LangGraph node ────────────────────────────────────────────────────────────
