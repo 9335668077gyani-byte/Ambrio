@@ -21,6 +21,17 @@ async def lifespan(app: FastAPI):
     _session_manager = SessionManager()
     await _session_manager.init("ambrio.db")
     _session_manager.set_model_router(ModelRouter(provider_keys=PROVIDER_KEYS))
+
+    # Bug F2 — initialize tools that rely on the DB / ERP engine
+    from ambrio.router.tools.memory_tool      import init_memory_tool
+    from ambrio.router.tools.sparepartspro_tool import init_erp_tool
+    from ambrio.router.memory.fts5_store      import FTS5Store
+    from ambrio.router.erp.nl_to_sql          import ERPQueryEngine
+    init_memory_tool(FTS5Store(_session_manager._db))
+    log.info("Memory tool initialized")
+    init_erp_tool(ERPQueryEngine())
+    log.info("ERP tool initialized")
+
     log.info("Ambrio FastAPI online — ws://localhost:8765/chat/{session_id}")
     yield
     # shutdown — nothing needed
