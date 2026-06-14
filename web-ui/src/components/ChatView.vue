@@ -9,6 +9,10 @@
         <div class="session-item">Memory Diagnostics</div>
         <div class="session-item">SparePartsPro ERP</div>
       </div>
+      <div class="connection-status" :class="connectionStatus">
+        <span class="status-dot"></span>
+        {{ connectionStatus === 'connected' ? 'Connected' : connectionStatus === 'connecting' ? 'Connecting...' : connectionStatus === 'error' ? 'Error' : 'Disconnected' }}
+      </div>
     </aside>
 
     <main class="chat-main neu-container">
@@ -44,34 +48,64 @@ import { ref, onMounted, onUnmounted } from 'vue'
 const prompt = ref('')
 const messages = ref([])
 const loading = ref(false)
+const connectionStatus = ref('connecting') // 'connecting' | 'connected' | 'disconnected' | 'error'
 let ws = null
-let currentAssistantMessage = null
+let currentAssistantIdx = null // F4: store index, not object reference
+let reconnectDelay = 1000      // F3: backoff state
+let isDestroyed = false        // F3: clean-close guard
 
 const connectWS = () => {
+  if (isDestroyed) return // F3: guard against reconnect after unmount
   ws = new WebSocket('ws://127.0.0.1:8000/chat/default-web-session')
-  
+
+  // F3: track connected state and reset backoff
+  ws.onopen = () => {
+    reconnectDelay = 1000
+    connectionStatus.value = 'connected'
+  }
+
+  // F5: onerror handler
+  ws.onerror = (err) => {
+    console.error('WebSocket error:', err)
+    connectionStatus.value = 'error'
+  }
+
   ws.onmessage = (event) => {
-    const data = JSON.parse(event.data)
-    
+    // F5: JSON.parse guard
+    let data
+    try {
+      data = JSON.parse(event.data)
+    } catch (e) {
+      console.error('WS message parse error:', e, event.data)
+      return
+    }
+
     if (data.type === 'token') {
-      if (currentAssistantMessage) {
-        currentAssistantMessage.content += data.data
+      // F4: index-based mutation so Vue 3 detects the change
+      if (currentAssistantIdx !== null) {
+        const msg = messages.value[currentAssistantIdx]
+        messages.value[currentAssistantIdx] = { ...msg, content: msg.content + data.data }
       }
     } else if (data.model === 'multi-agent' || data.tokens) {
       // Chat done
       loading.value = false
-      currentAssistantMessage = null
+      currentAssistantIdx = null
     } else if (data.message) {
-      // Error message
+      // Error message from server
       messages.value.push({ role: 'assistant', content: `Error: ${data.message}` })
       loading.value = false
-      currentAssistantMessage = null
+      currentAssistantIdx = null
     }
   }
 
-  ws.onclose = () => {
-    console.log('WS Disconnected, reconnecting...')
-    setTimeout(connectWS, 2000)
+  // F3: exponential backoff + clean-close guard
+  ws.onclose = (event) => {
+    connectionStatus.value = 'disconnected'
+    // Clean closes (1000=Normal, 1001=GoingAway) — don't reconnect
+    if (event.code === 1000 || event.code === 1001 || isDestroyed) return
+    console.log(`WS closed (code ${event.code}), reconnecting in ${reconnectDelay}ms`)
+    setTimeout(connectWS, reconnectDelay)
+    reconnectDelay = Math.min(reconnectDelay * 2, 30000) // cap at 30s
   }
 }
 
@@ -79,24 +113,28 @@ onMounted(() => {
   connectWS()
 })
 
+// F3: set destroyed flag before closing so onclose doesn't re-trigger connectWS
 onUnmounted(() => {
+  isDestroyed = true
   if (ws) {
     ws.onclose = null
-    ws.close()
+    ws.close(1000) // clean close with code 1000
   }
 })
 
 const sendPrompt = () => {
-  if (!prompt.value.trim() || loading.value || !ws || ws.readyState !== WebSocket.OPEN) return;
-  
+  if (!prompt.value.trim() || loading.value || !ws || ws.readyState !== WebSocket.OPEN) return
+
   const userText = prompt.value
   messages.value.push({ role: 'user', content: userText })
   prompt.value = ''
   loading.value = true
-  
-  currentAssistantMessage = { role: 'assistant', content: '' }
-  messages.value.push(currentAssistantMessage)
-  
+
+  // F4: push placeholder and store its index
+  const assistantIdx = messages.value.length
+  messages.value.push({ role: 'assistant', content: '' })
+  currentAssistantIdx = assistantIdx
+
   ws.send(JSON.stringify({ content: userText }))
 }
 </script>
@@ -202,4 +240,24 @@ const sendPrompt = () => {
 .chat-input-area .neu-input {
   flex-grow: 1;
 }
+
+/* F3/F5: Connection status indicator */
+.connection-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  padding: 8px 0;
+}
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #94a3b8;
+  flex-shrink: 0;
+}
+.connection-status.connected .status-dot { background: #22c55e; }
+.connection-status.error .status-dot { background: #ef4444; }
+.connection-status.disconnected .status-dot { background: #f59e0b; }
 </style>
