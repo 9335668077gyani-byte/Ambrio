@@ -46,6 +46,16 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Ambrio", version=VERSION, lifespan=lifespan)  # Fix 5
 
+# Fix 8 — CORS: allow Vue frontend at localhost:5173 to call HTTP endpoints
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/health", response_model=HealthResponse)   # Fix 5
 async def health() -> HealthResponse:

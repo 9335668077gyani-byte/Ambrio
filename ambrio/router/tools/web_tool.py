@@ -10,7 +10,7 @@ Tools registered:
   reddit_search(query, subreddit?)  - Search Reddit posts
   github_search(query, type?)       - Search GitHub code/repos
 """
-import urllib.request, urllib.parse, json, re, logging, html
+import urllib.request, urllib.parse, json, re, logging, html, asyncio, functools
 from ambrio.router.tool_registry import tool
 
 log = logging.getLogger(__name__)
@@ -58,7 +58,8 @@ async def web_search(query: str, max_results: int = 5) -> dict:
         # DuckDuckGo instant answer API (no key needed)
         encoded = urllib.parse.quote(query)
         url = f'https://api.duckduckgo.com/?q={encoded}&format=json&no_redirect=1&no_html=1&skip_disambig=1'
-        raw = _fetch(url)
+        loop = asyncio.get_event_loop()
+        raw = await loop.run_in_executor(None, _fetch, url)
         data = json.loads(raw)
 
         results = []
@@ -85,7 +86,7 @@ async def web_search(query: str, max_results: int = 5) -> dict:
         if not results:
             # Fallback: DuckDuckGo HTML search
             html_url = f'https://html.duckduckgo.com/html/?q={encoded}'
-            html_raw = _fetch(html_url)
+            html_raw = await loop.run_in_executor(None, _fetch, html_url)
             # Extract result snippets
             snippets = re.findall(r'class="result__snippet"[^>]*>(.*?)</a>', html_raw, re.DOTALL)
             titles   = re.findall(r'class="result__a"[^>]*>(.*?)</a>', html_raw, re.DOTALL)
@@ -123,7 +124,8 @@ async def web_read(url: str, max_chars: int = 3000) -> dict:
         if not url.startswith(('http://', 'https://')):
             url = 'https://' + url
 
-        raw = _fetch(url)
+        loop = asyncio.get_event_loop()
+        raw = await loop.run_in_executor(None, _fetch, url)
         text = _strip_html(raw, max_chars=max_chars)
 
         return {
@@ -153,7 +155,8 @@ async def reddit_search(query: str, subreddit: str = '', max_results: int = 5) -
         else:
             url = f'https://www.reddit.com/search.json?q={encoded}&limit={max_results}&sort=relevance'
 
-        raw = _fetch(url, headers={'Accept': 'application/json'})
+        loop = asyncio.get_event_loop()
+        raw = await loop.run_in_executor(None, functools.partial(_fetch, url, headers={'Accept': 'application/json'}))
         data = json.loads(raw)
 
         posts = []
@@ -193,7 +196,8 @@ async def github_search(query: str, search_type: str = 'repositories', max_resul
     try:
         encoded = urllib.parse.quote(query)
         url = f'https://api.github.com/search/{search_type}?q={encoded}&per_page={max_results}'
-        raw = _fetch(url, headers={'Accept': 'application/vnd.github.v3+json'})
+        loop = asyncio.get_event_loop()
+        raw = await loop.run_in_executor(None, functools.partial(_fetch, url, headers={'Accept': 'application/vnd.github.v3+json'}))
         data = json.loads(raw)
 
         items = []
