@@ -54,6 +54,11 @@ class SessionManager:
         self._post_turn_worker = None
         self._bg_tasks: set = set()  # strong refs prevent GC of fire-and-forget tasks
 
+    @property
+    def db(self) -> 'Database | None':
+        """Public accessor for the underlying Database instance."""
+        return self._db
+
     async def init(self, db_path: str = "ambrio.db") -> None:
         self._db = Database(db_path)
         await self._db.init()

@@ -27,10 +27,17 @@ async def lifespan(app: FastAPI):
     from ambrio.router.tools.sparepartspro_tool import init_erp_tool
     from ambrio.router.memory.fts5_store      import FTS5Store
     from ambrio.router.erp.nl_to_sql          import ERPQueryEngine
-    init_memory_tool(FTS5Store(_session_manager._db))
-    log.info("Memory tool initialized")
-    init_erp_tool(ERPQueryEngine())
-    log.info("ERP tool initialized")
+    try:
+        init_memory_tool(FTS5Store(_session_manager.db))
+        log.info("Memory tool initialized")
+    except Exception:
+        log.warning("Memory tool failed to initialize — memory_search will be unavailable", exc_info=True)
+
+    try:
+        init_erp_tool(ERPQueryEngine())
+        log.info("ERP tool initialized")
+    except Exception:
+        log.warning("ERP tool failed to initialize — sparepartspro_query will be unavailable", exc_info=True)
 
     log.info("Ambrio FastAPI online — ws://localhost:8765/chat/{session_id}")
     yield
