@@ -11,7 +11,7 @@
       </div>
       <div class="connection-status" :class="connectionStatus">
         <span class="status-dot"></span>
-        {{ connectionStatus === 'connected' ? 'Connected' : connectionStatus === 'connecting' ? 'Connecting...' : connectionStatus === 'error' ? 'Error' : 'Disconnected' }}
+        {{ connectionLabel }}
       </div>
     </aside>
 
@@ -20,7 +20,7 @@
         <div class="message assistant animate-fade-in">
           Hello! I am Ambrio. How can I help you today?
         </div>
-        <div v-for="(msg, idx) in messages" :key="idx" :class="['message', msg.role, 'animate-fade-in']">
+        <div v-for="msg in messages" :key="msg.id" :class="['message', msg.role, 'animate-fade-in']">
           {{ msg.content }}
         </div>
       </div>
@@ -43,7 +43,9 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+
+let msgCounter = 0 // I3: monotonic counter for stable :key values
 
 const prompt = ref('')
 const messages = ref([])
@@ -52,6 +54,7 @@ const connectionStatus = ref('connecting') // 'connecting' | 'connected' | 'disc
 let ws = null
 let currentAssistantIdx = null // F4: store index, not object reference
 let reconnectDelay = 1000      // F3: backoff state
+let reconnectTimer = null      // I4: handle so we can cancel on unmount
 let isDestroyed = false        // F3: clean-close guard
 
 const connectWS = () => {
@@ -68,6 +71,8 @@ const connectWS = () => {
   ws.onerror = (err) => {
     console.error('WebSocket error:', err)
     connectionStatus.value = 'error'
+    loading.value = false       // I1: unfreeze Send button on error
+    currentAssistantIdx = null  // I1: reset stream tracker
   }
 
   ws.onmessage = (event) => {
@@ -101,10 +106,12 @@ const connectWS = () => {
   // F3: exponential backoff + clean-close guard
   ws.onclose = (event) => {
     connectionStatus.value = 'disconnected'
+    loading.value = false       // I2: unfreeze Send button if mid-stream disconnect
+    currentAssistantIdx = null  // I2: reset stream tracker
     // Clean closes (1000=Normal, 1001=GoingAway) — don't reconnect
     if (event.code === 1000 || event.code === 1001 || isDestroyed) return
     console.log(`WS closed (code ${event.code}), reconnecting in ${reconnectDelay}ms`)
-    setTimeout(connectWS, reconnectDelay)
+    reconnectTimer = setTimeout(connectWS, reconnectDelay) // I4: store handle
     reconnectDelay = Math.min(reconnectDelay * 2, 30000) // cap at 30s
   }
 }
@@ -116,23 +123,39 @@ onMounted(() => {
 // F3: set destroyed flag before closing so onclose doesn't re-trigger connectWS
 onUnmounted(() => {
   isDestroyed = true
+  reconnectDelay = 1000 // C2: reset backoff for next mount
+  if (reconnectTimer !== null) {
+    clearTimeout(reconnectTimer) // I4: cancel pending reconnect
+    reconnectTimer = null
+  }
   if (ws) {
     ws.onclose = null
     ws.close(1000) // clean close with code 1000
   }
 })
 
+// M2: computed label replaces nested ternary in template
+const connectionLabel = computed(() => {
+  if (connectionStatus.value === 'connected') return 'Connected'
+  if (connectionStatus.value === 'connecting') return 'Connecting...'
+  if (connectionStatus.value === 'error') return 'Error'
+  return 'Disconnected'
+})
+
 const sendPrompt = () => {
   if (!prompt.value.trim() || loading.value || !ws || ws.readyState !== WebSocket.OPEN) return
 
   const userText = prompt.value
-  messages.value.push({ role: 'user', content: userText })
+  // I3: assign stable id from monotonic counter
+  messages.value.push({ id: ++msgCounter, role: 'user', content: userText })
   prompt.value = ''
   loading.value = true
 
   // F4: push placeholder and store its index
+  // NOTE: currentAssistantIdx is safe from concurrent sends because the Send button
+  // is disabled while loading=true. This is enforced by :disabled="loading" in the template. (C1)
   const assistantIdx = messages.value.length
-  messages.value.push({ role: 'assistant', content: '' })
+  messages.value.push({ id: ++msgCounter, role: 'assistant', content: '' })
   currentAssistantIdx = assistantIdx
 
   ws.send(JSON.stringify({ content: userText }))
@@ -260,4 +283,14 @@ const sendPrompt = () => {
 .connection-status.connected .status-dot { background: #22c55e; }
 .connection-status.error .status-dot { background: #ef4444; }
 .connection-status.disconnected .status-dot { background: #f59e0b; }
+
+/* M1: connecting state — animated blue pulse */
+.connection-status.connecting .status-dot {
+  background: #3b82f6;
+  animation: pulse 1.5s infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
 </style>
