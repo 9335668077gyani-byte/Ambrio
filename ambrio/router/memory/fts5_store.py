@@ -1,5 +1,7 @@
 import re
 
+from .db import Database
+
 _FTS5_SPECIAL = re.compile(r'[!"\*\(\)\-\:\^~]')
 
 def _sanitize_fts(query: str) -> str:
