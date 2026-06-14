@@ -1,5 +1,5 @@
 # ambrio/agents/runner.py
-import asyncio
+import asyncio, re
 from typing import AsyncIterator
 from ambrio.agents.graph import build_graph
 from ambrio.agents.state import AgentState
@@ -23,7 +23,8 @@ async def run_agent(session_id: str, user_input: str,
     )
     final: AgentState = await GRAPH.ainvoke(initial)
     answer = final.get("final_answer") or ""
-    words  = answer.split()
-    for i, word in enumerate(words):
-        yield word + (" " if i < len(words) - 1 else "")
+    # Preserve all whitespace (newlines, indentation) — split() destroyed markdown
+    chunks = re.findall(r'\S+\s*', answer)
+    for chunk in chunks:
+        yield chunk
         await asyncio.sleep(0.015)
